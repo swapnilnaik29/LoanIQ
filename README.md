@@ -4,6 +4,9 @@ LoanIQ is a full-stack, merchant-facing credit recommendation, cash-flow forecas
 
 ---
 
+## Render Backend Deployment
+https://loaniq-kx9f.onrender.com/login
+
 ## 1. Project Architecture & Directory Structure
 
 ```text
@@ -285,5 +288,3 @@ LoanIQ implements a mandatory AI Agent Subsystem structured into:
 - **Synthetic Data Notice:** All merchant records, historical sales, loan applications, lenders, and product terms are synthetic artifacts created for evaluation.
 - **Decision-Support Only:** Acceptance probability estimates and cash-flow projections are decision-support outputs; they do not represent real banking agreements or guaranteed disbursements.
 
-## 10. Render Backend Deployment
-https://loaniq-kx9f.onrender.com/login
