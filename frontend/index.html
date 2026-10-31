@@ -461,11 +461,11 @@
                   <span>Adjusted Daily EMI Repayment</span>
                   <span id="badge-old-emi" class="slider-value-badge">₹0.00/day</span>
                 </div>
-                <input type="range" id="slider-old-emi" class="range-slider" min="50" max="1500" step="5" value="358">
+                <input type="range" id="slider-old-emi" class="range-slider" min="50" max="1500" step="1" value="358">
                 <div class="slider-threshold-marker">
-                  <span>Min Interest Cover</span>
+                  <span id="old-emi-min-lbl">Min EMI</span>
                   <span id="old-emi-threshold-reference" style="font-weight:600; color:#0369a1;">Forecast Cashflow Limit</span>
-                  <span>Max ₹1,500/day</span>
+                  <span id="old-emi-max-lbl">Max EMI</span>
                 </div>
                 <!-- Dynamic Red Marker Indicator for Old Loan -->
                 <div id="old-emi-red-marker-flag" class="green-marker-flag" style="margin-top:0.4rem;">
@@ -600,11 +600,11 @@
                   <span>Daily EMI Repayment</span>
                   <span id="badge-emi" class="slider-value-badge">₹468/day</span>
                 </div>
-                <input type="range" id="slider-emi" class="range-slider" min="50" max="2500" step="10" value="468">
+                <input type="range" id="slider-emi" class="range-slider" min="50" max="2500" step="1" value="468">
                 <div class="slider-threshold-marker">
-                  <span>Min ₹50/day</span>
+                  <span id="new-emi-min-lbl">Min EMI</span>
                   <span id="emi-threshold-reference" style="font-weight:600; color:#0369a1;">Forecast Net Cap</span>
-                  <span>Max ₹2,500/day</span>
+                  <span id="new-emi-max-lbl">Max EMI</span>
                 </div>
                 <!-- Prominent Red Marker Alert Flag -->
                 <div id="emi-red-marker-flag" class="green-marker-flag" style="margin-top:0.4rem;">
@@ -798,6 +798,135 @@
       </div>
       <div id="status-modal-body">
         Loading...
+      </div>
+    </div>
+  </div>
+
+  <!-- Loan Detail & 3-Slider Optimization Modal with Pie Chart -->
+  <div id="loan-detail-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width:860px; width:95%; max-height:92vh; padding:1.5rem;">
+      <div class="modal-header" style="margin-bottom:0.75rem; padding-bottom:0.75rem;">
+        <div>
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <h3 id="modal-loan-title" style="color:var(--dark-navy); margin:0; font-size:1.25rem;">Loan Product Details</h3>
+            <span id="modal-loan-id-badge" class="badge badge-blue">LP001</span>
+            <span id="modal-loan-prob-badge" class="badge badge-green">82.5% Acceptance</span>
+          </div>
+          <p id="modal-loan-subtitle" style="font-size:0.825rem; color:var(--text-secondary); margin:0.25rem 0 0 0;">Lender Name • Product Category</p>
+        </div>
+        <button id="close-loan-modal-btn" class="close-modal-btn">&times;</button>
+      </div>
+
+      <div class="cards-grid-2" style="gap:1.25rem;">
+        <!-- Left Column: Pie Chart & Cost Breakdown -->
+        <div>
+          <div class="card" style="padding:1rem; background:#f8fafc; border:1px solid #e2e8f0; margin-bottom:0.75rem;">
+            <div style="font-size:0.85rem; font-weight:700; color:var(--dark-navy); margin-bottom:0.5rem; display:flex; justify-content:space-between; align-items:center;">
+              <span>Financing Cost Composition</span>
+              <span id="modal-pie-emi-badge" style="font-size:0.825rem; font-weight:700; color:#002970;">Daily EMI: ₹0.00</span>
+            </div>
+            <!-- Canvas container for Donut / Pie Chart -->
+            <div style="position:relative; height:200px; width:100%; display:flex; justify-content:center; align-items:center;">
+              <canvas id="loanModalPieChart"></canvas>
+            </div>
+            <div style="display:flex; justify-content:space-around; font-size:0.75rem; margin-top:0.6rem; text-align:center;">
+              <div><span style="color:#002970; font-weight:bold;">■</span> Principal: <strong id="modal-leg-principal">₹0</strong></div>
+              <div><span style="color:#00BAF2; font-weight:bold;">■</span> Total Interest: <strong id="modal-leg-interest">₹0</strong></div>
+              <div><span style="color:#f59e0b; font-weight:bold;">■</span> Fee: <strong id="modal-leg-fee">₹0</strong></div>
+            </div>
+          </div>
+
+          <!-- Key Financial Metrics 4-grid -->
+          <div class="cards-grid-4" style="gap:0.4rem; text-align:center;">
+            <div style="background:#ffffff; border:1px solid #e2e8f0; padding:0.45rem; border-radius:var(--radius-sm);">
+              <div style="font-size:0.68rem; color:var(--text-secondary);">PRINCIPAL</div>
+              <div style="font-weight:700; font-size:0.85rem;" id="modal-kpi-principal">₹0</div>
+            </div>
+            <div style="background:#ffffff; border:1px solid #e2e8f0; padding:0.45rem; border-radius:var(--radius-sm);">
+              <div style="font-size:0.68rem; color:var(--text-secondary);">DAILY EMI</div>
+              <div style="font-weight:700; font-size:0.85rem; color:#002970;" id="modal-kpi-emi">₹0/day</div>
+            </div>
+            <div style="background:#ffffff; border:1px solid #e2e8f0; padding:0.45rem; border-radius:var(--radius-sm);">
+              <div style="font-size:0.68rem; color:var(--text-secondary);">TOTAL INTEREST</div>
+              <div style="font-weight:700; font-size:0.85rem; color:#0284c7;" id="modal-kpi-interest">₹0</div>
+            </div>
+            <div style="background:#ffffff; border:1px solid #e2e8f0; padding:0.45rem; border-radius:var(--radius-sm);">
+              <div style="font-size:0.68rem; color:var(--text-secondary);">TOTAL REPAY</div>
+              <div style="font-weight:700; font-size:0.85rem;" id="modal-kpi-repayment">₹0</div>
+            </div>
+          </div>
+
+          <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.75rem; line-height:1.45;" id="modal-loan-terms-meta">
+            • Rate: <strong>15.0% APR</strong> | Processing Fee: <strong>1.0%</strong> | Prepayment: <strong>0%</strong><br>
+            • Allowed: <strong>₹50,000 - ₹2,00,000</strong> | Tenure: <strong>90 - 365 Days</strong>
+          </div>
+          <div id="modal-loan-reason-box" class="rec-reason" style="margin-top:0.5rem; font-size:0.8rem;"></div>
+        </div>
+
+        <!-- Right Column: 3 Optimization Sliders -->
+        <div>
+          <div style="font-size:0.9rem; font-weight:700; color:var(--dark-navy); margin-bottom:0.25rem;">
+            Interactive Loan Terms Optimization
+          </div>
+          <p style="font-size:0.775rem; color:var(--text-secondary); margin-bottom:1rem;">
+            Adjust Loan Amount, Tenure, or Daily EMI slider. Values recalculate in real-time and validate against product criteria and forecast cashflow.
+          </p>
+
+          <!-- Slider 1: Loan Amount Slider -->
+          <div class="slider-group" style="margin-bottom:1rem;">
+            <div class="slider-label-row">
+              <span>Sanctioned Principal Amount</span>
+              <span id="modal-badge-amount" class="slider-value-badge">₹1,00,000</span>
+            </div>
+            <input type="range" id="modal-slider-amount" class="range-slider" min="10000" max="250000" step="5000" value="100000">
+            <div class="slider-threshold-marker">
+              <span id="modal-amount-min-lbl">Min ₹10,000</span>
+              <span style="font-weight:600; color:#0369a1;">Product Limit</span>
+              <span id="modal-amount-max-lbl">Max ₹2,50,000</span>
+            </div>
+          </div>
+
+          <!-- Slider 2: Tenure Slider -->
+          <div class="slider-group" style="margin-bottom:1rem;">
+            <div class="slider-label-row">
+              <span>Loan Tenure (Days)</span>
+              <span id="modal-badge-tenure" class="slider-value-badge">365 Days</span>
+            </div>
+            <input type="range" id="modal-slider-tenure" class="range-slider" min="30" max="540" step="15" value="365">
+            <div class="slider-threshold-marker">
+              <span id="modal-tenure-min-lbl">Min 30 Days</span>
+              <span style="font-weight:600; color:#0369a1;">Allowed Tenure</span>
+              <span id="modal-tenure-max-lbl">Max 365 Days</span>
+            </div>
+          </div>
+
+          <!-- Slider 3: Daily EMI Slider with Red Marker -->
+          <div class="slider-group" style="margin-bottom:1rem;">
+            <div class="slider-label-row">
+              <span>Daily Reducing EMI</span>
+              <span id="modal-badge-emi" class="slider-value-badge">₹297.12/day</span>
+            </div>
+            <input type="range" id="modal-slider-emi" class="range-slider" min="50" max="2500" step="1" value="297">
+            <div class="slider-threshold-marker">
+              <span id="modal-emi-min-lbl">Min EMI</span>
+              <span id="modal-emi-limit-lbl" style="font-weight:600; color:#0369a1;">Forecast Cashflow Limit</span>
+              <span id="modal-emi-max-lbl">Max EMI</span>
+            </div>
+            <!-- Red Marker Alert for Modal -->
+            <div id="modal-emi-red-marker-flag" class="green-marker-flag" style="margin-top:0.4rem; font-size:0.75rem;">
+              ✅ <strong>SAFE ZONE:</strong> Payment covered by forecast cashflow.
+            </div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; margin-top:1.25rem;">
+            <button id="modal-apply-optimizer-btn" class="btn btn-primary" style="flex:1; padding:0.65rem 1rem; font-size:0.875rem;">
+              ⚡ Send to Loan Optimizer →
+            </button>
+            <button id="modal-cancel-btn" class="btn btn-outline" style="padding:0.65rem 1rem; font-size:0.875rem;">
+              Close
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

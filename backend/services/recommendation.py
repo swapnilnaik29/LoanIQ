@@ -131,6 +131,10 @@ def recommend_loans(
         affordability = "Comfortable"
         if max_daily_emi and daily_emi > max_daily_emi:
             affordability = "Exceeds Requested EMI Limit"
+            eligibility.is_eligible = False
+            eligibility.failed_reasons.append(
+                f"Calculated daily EMI ₹{daily_emi:.2f} exceeds requested affordability limit of ₹{max_daily_emi:.2f}/day."
+            )
         elif free_cash < -50.0:
             affordability = "High Risk (Negative Cash Margin)"
         elif free_cash < 50.0:

@@ -4,6 +4,7 @@
 
 import { api } from "./api.js";
 import { getCurrentMerchantId, formatINR } from "./auth.js";
+import { openLoanDetailModal } from "./loans.js";
 
 export async function loadDashboard() {
   const merchantId = getCurrentMerchantId();
@@ -78,11 +79,11 @@ function renderTopRecommendations(recs) {
   }
 
   container.innerHTML = eligible.map(r => `
-    <div class="rec-card" style="margin-bottom:0.75rem; padding:1rem;">
+    <div class="rec-card" data-loan-id="${r.loan_id}" style="margin-bottom:0.75rem; padding:1rem; cursor:pointer;" title="Click for details, cost pie chart & sliders">
       <div class="rec-card-top">
         <div>
           <span class="rec-lender">${r.lender_name}</span>
-          <div class="rec-name" style="font-size:1.05rem;">${r.product_name}</div>
+          <div class="rec-name" style="font-size:1.05rem;">${r.product_name} <span style="font-size:0.75rem; color:var(--primary-blue); font-weight:normal;">🔍</span></div>
         </div>
         <span class="badge badge-green">Probability: ${r.probability_percentage}</span>
       </div>
@@ -103,6 +104,14 @@ function renderTopRecommendations(recs) {
       <div class="rec-reason">${r.recommendation_reason}</div>
     </div>
   `).join("");
+
+  container.querySelectorAll(".rec-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const lid = card.getAttribute("data-loan-id");
+      const prod = eligible.find(p => p.loan_id === lid);
+      if (prod) openLoanDetailModal(prod);
+    });
+  });
 }
 
 function renderForecastPreview(fc) {

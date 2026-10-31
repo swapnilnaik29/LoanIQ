@@ -24,6 +24,14 @@ let debounceTimer = null;
 // Currently selected old loan for optimization ('all' or active loan object)
 let selectedOldLoanState = null;
 
+export function computeEmi(P, annualRate, tenureDays) {
+  if (P <= 0 || tenureDays <= 0) return 0;
+  if (annualRate <= 0) return P / tenureDays;
+  const r = (annualRate / 100) / 365;
+  const factor = Math.pow(1 + r, tenureDays);
+  return Math.round((P * (r * factor) / (factor - 1)) * 100) / 100;
+}
+
 export async function loadOptimizer() {
   const merchantId = getCurrentMerchantId();
   if (!merchantId) return;
@@ -204,16 +212,25 @@ function loadSelectedOldLoan(selectionId) {
 
   if (emiSlider && tenureSlider) {
     const P = selectedOldLoanState.principal;
-    const r = (selectedOldLoanState.apr / 100) / 365;
-    const minDailyInterest = Math.ceil(P * r) + 5;
+    const R = selectedOldLoanState.apr;
+    const minOldTenure = 15;
+    const maxOldTenure = 540;
 
-    emiSlider.min = Math.max(20, minDailyInterest);
-    emiSlider.max = Math.max(1500, Math.round(selectedOldLoanState.currDailyEmi * 3));
-    emiSlider.value = Math.round(selectedOldLoanState.currDailyEmi);
+    const minOldEmi = computeEmi(P, R, maxOldTenure);
+    const maxOldEmi = computeEmi(P, R, minOldTenure);
 
-    tenureSlider.min = 15;
-    tenureSlider.max = 540;
-    tenureSlider.value = selectedOldLoanState.currTenureDays;
+    emiSlider.min = Math.floor(minOldEmi);
+    emiSlider.max = Math.ceil(maxOldEmi);
+    emiSlider.step = 1;
+    emiSlider.value = Math.max(minOldEmi, Math.min(maxOldEmi, Math.round(selectedOldLoanState.currDailyEmi)));
+
+    tenureSlider.min = minOldTenure;
+    tenureSlider.max = maxOldTenure;
+    tenureSlider.step = 5;
+    tenureSlider.value = Math.max(minOldTenure, Math.min(maxOldTenure, selectedOldLoanState.currTenureDays));
+
+    setText("old-emi-min-lbl", `Min ${formatINR(minOldEmi)} (${maxOldTenure}d)`);
+    setText("old-emi-max-lbl", `Max ${formatINR(maxOldEmi)} (${minOldTenure}d)`);
 
     syncOldSlidersFromEmi();
   }
@@ -237,21 +254,35 @@ function syncOldSlidersFromEmi() {
   const emiBadge = document.getElementById("badge-old-emi");
   const tenureBadge = document.getElementById("badge-old-tenure");
 
-  const newEmi = parseFloat(emiSlider.value);
+  let newEmi = parseFloat(emiSlider.value);
   const P = selectedOldLoanState.principal;
   const R = selectedOldLoanState.apr;
   const r = (R / 100) / 365;
 
-  // Calculate resulting tenure: N = ln(E / (E - P*r)) / ln(1+r)
-  let calculatedN = 365;
-  if (newEmi > P * r) {
-    const factor = newEmi / (newEmi - (P * r));
-    calculatedN = Math.ceil(Math.log(factor) / Math.log(1 + r));
-  } else {
-    calculatedN = 540;
-  }
-  calculatedN = Math.max(15, Math.min(540, calculatedN));
+  const minOldTenure = 15;
+  const maxOldTenure = 540;
+  const minOldEmi = computeEmi(P, R, maxOldTenure);
+  const maxOldEmi = computeEmi(P, R, minOldTenure);
 
+  let calculatedN = 365;
+  // RULE: "do not increase the daily emi if the tenure becomes less than minimum loan tenure and vice versa"
+  if (newEmi >= maxOldEmi) {
+    newEmi = maxOldEmi;
+    calculatedN = minOldTenure;
+  } else if (newEmi <= minOldEmi) {
+    newEmi = minOldEmi;
+    calculatedN = maxOldTenure;
+  } else {
+    if (newEmi > P * r) {
+      const factor = newEmi / (newEmi - (P * r));
+      calculatedN = Math.round(Math.log(factor) / Math.log(1 + r));
+    } else {
+      calculatedN = maxOldTenure;
+    }
+    calculatedN = Math.max(minOldTenure, Math.min(maxOldTenure, calculatedN));
+  }
+
+  emiSlider.value = newEmi;
   tenureSlider.value = calculatedN;
 
   emiBadge.textContent = formatINR(newEmi) + "/day";
@@ -268,14 +299,24 @@ function syncOldSlidersFromTenure() {
   const emiBadge = document.getElementById("badge-old-emi");
   const tenureBadge = document.getElementById("badge-old-tenure");
 
-  const N = parseInt(tenureSlider.value);
+  let N = parseInt(tenureSlider.value);
   const P = selectedOldLoanState.principal;
   const R = selectedOldLoanState.apr;
-  const r = (R / 100) / 365;
+  const minOldTenure = 15;
+  const maxOldTenure = 540;
 
-  // Calculate required EMI: EMI = P * r * (1+r)^N / ((1+r)^N - 1)
-  const factor = Math.pow(1 + r, N);
-  const calculatedEmi = Math.round((P * (r * factor) / (factor - 1)) * 100) / 100;
+  if (N <= minOldTenure) {
+    N = minOldTenure;
+  } else if (N >= maxOldTenure) {
+    N = maxOldTenure;
+  }
+  tenureSlider.value = N;
+
+  const minOldEmi = computeEmi(P, R, maxOldTenure);
+  const maxOldEmi = computeEmi(P, R, minOldTenure);
+
+  let calculatedEmi = computeEmi(P, R, N);
+  calculatedEmi = Math.max(minOldEmi, Math.min(maxOldEmi, calculatedEmi));
 
   emiSlider.value = calculatedEmi;
 
@@ -441,20 +482,28 @@ function initNewLoanSimulator() {
     markerLabel.textContent = `Forecast Net Limit: ${formatINR(currentForecastNetDaily)}/day`;
   }
 
-  function computeEmi(P, annualRate, tenureDays) {
-    if (P <= 0 || tenureDays <= 0) return 0;
-    if (annualRate <= 0) return P / tenureDays;
-    const r = (annualRate / 100) / 365;
-    const factor = Math.pow(1 + r, tenureDays);
-    return Math.round((P * (r * factor) / (factor - 1)) * 100) / 100;
-  }
+  const minNewTenure = 30;
+  const maxNewTenure = 540;
 
   function syncNewLoanSliders() {
     const P = parseFloat(amountSlider.value);
-    const N = parseInt(tenureSlider.value);
+    let N = parseInt(tenureSlider.value);
     const R = parseFloat(rateSlider.value);
 
-    const calculatedEmi = computeEmi(P, R, N);
+    if (N <= minNewTenure) N = minNewTenure;
+    if (N >= maxNewTenure) N = maxNewTenure;
+    tenureSlider.value = N;
+
+    // Strict tenure-bounded Daily EMI limits for prospective new loan
+    const minNewEmi = computeEmi(P, R, maxNewTenure);
+    const maxNewEmi = computeEmi(P, R, minNewTenure);
+
+    emiSlider.min = Math.floor(minNewEmi);
+    emiSlider.max = Math.ceil(maxNewEmi);
+    emiSlider.step = 1;
+
+    let calculatedEmi = computeEmi(P, R, N);
+    calculatedEmi = Math.max(minNewEmi, Math.min(maxNewEmi, calculatedEmi));
     emiSlider.value = calculatedEmi;
 
     amountBadge.textContent = formatINR(P);
@@ -462,22 +511,46 @@ function initNewLoanSimulator() {
     rateBadge.textContent = `${R.toFixed(1)}% APR`;
     emiBadge.textContent = formatINR(calculatedEmi) + "/day";
 
+    setText("new-emi-min-lbl", `Min ${formatINR(minNewEmi)} (${maxNewTenure}d)`);
+    setText("new-emi-max-lbl", `Max ${formatINR(maxNewEmi)} (${minNewTenure}d)`);
+
     checkNewLoanEmiThreshold(calculatedEmi);
     triggerDebouncedSimulation();
   }
 
   function syncFromNewLoanEmiSlider() {
-    const emi = parseFloat(emiSlider.value);
-    const N = parseInt(tenureSlider.value);
+    let emi = parseFloat(emiSlider.value);
+    const P = parseFloat(amountSlider.value);
     const R = parseFloat(rateSlider.value);
-
     const r = (R / 100) / 365;
-    const factor = Math.pow(1 + r, N);
-    const estimatedP = Math.round(emi * (factor - 1) / (r * factor));
-    const clampedP = Math.max(10000, Math.min(250000, estimatedP));
 
-    amountSlider.value = clampedP;
-    amountBadge.textContent = formatINR(clampedP);
+    const minNewEmi = computeEmi(P, R, maxNewTenure);
+    const maxNewEmi = computeEmi(P, R, minNewTenure);
+
+    let N = 180;
+    // RULE: "do not increase the daily emi if the tenure becomes less than minimum loan tenure and vice versa"
+    if (emi >= maxNewEmi) {
+      emi = maxNewEmi;
+      N = minNewTenure;
+    } else if (emi <= minNewEmi) {
+      emi = minNewEmi;
+      N = maxNewTenure;
+    } else {
+      if (emi > P * r) {
+        const factor = emi / (emi - (P * r));
+        N = Math.round(Math.log(factor) / Math.log(1 + r));
+      } else {
+        N = maxNewTenure;
+      }
+      N = Math.max(minNewTenure, Math.min(maxNewTenure, N));
+    }
+
+    emiSlider.value = emi;
+    tenureSlider.value = N;
+
+    amountBadge.textContent = formatINR(P);
+    tenureBadge.textContent = `${N} Days (${Math.round(N / 30)} mos)`;
+    rateBadge.textContent = `${R.toFixed(1)}% APR`;
     emiBadge.textContent = formatINR(emi) + "/day";
 
     checkNewLoanEmiThreshold(emi);
