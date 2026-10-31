@@ -31,5 +31,5 @@ async def handle_stt(
 
 @assistant_router.post("/tts", response_model=TTSResponse)
 def handle_tts(req: TTSRequest):
-    return text_to_speech(req.text, language_code=req.language_code or "hi-IN")
+    return text_to_speech(req.text, language_code=req.language_code or "mr-IN", speaker=req.speaker)
 

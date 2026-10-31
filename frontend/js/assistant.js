@@ -8,6 +8,7 @@
 import { api } from "./api.js";
 import { getCurrentMerchantId } from "./auth.js";
 import { switchPage } from "./app.js";
+import { getCurrentLanguage, changeLanguage } from "./i18n.js";
 
 let mediaRecorder = null;
 let audioChunks = [];
@@ -95,7 +96,7 @@ export async function handleSendMessage() {
     const res = await api.assistant.chat({
       merchant_id: merchantId,
       message,
-      session_id: "demo_session",
+      session_id: `session_${merchantId}`,
       page_context: {
         current_page: window.location.hash.replace("#", "") || "dashboard",
       }
@@ -103,14 +104,48 @@ export async function handleSendMessage() {
 
     updateChatMessage(placeholderId, res.reply_text, res.workflow_type, res.llm_used, res.tool_calls);
 
-    // If UI Action was returned, execute it after brief delay
-    if (res.ui_action && res.ui_action.action_type === "NAVIGATE" && res.ui_action.target_page) {
+    // If Allowlisted UI Action was returned, dispatch safely
+    if (res.ui_action) {
       setTimeout(() => {
-        switchPage(res.ui_action.target_page, res.ui_action.parameters);
+        dispatchUIAction(res.ui_action);
       }, 1000);
     }
   } catch (err) {
     updateChatMessage(placeholderId, `Error communicating with Assistant: ${err.message}`, "ERROR", false);
+  }
+}
+
+/**
+ * Allowlisted UI Action Dispatcher (ai_prompt.md Section 5.6)
+ * Validates action type and parameters before executing.
+ * No arbitrary JavaScript, code generation, or raw DOM eval.
+ */
+export function dispatchUIAction(uiAction) {
+  if (!uiAction || !uiAction.action_type) return;
+  const actionType = String(uiAction.action_type).toUpperCase();
+  const targetPage = uiAction.target_page || uiAction.page_id || "dashboard";
+  const params = uiAction.parameters || uiAction.field_values || {};
+
+  switch (actionType) {
+    case "NAVIGATE":
+    case "NAVIGATE_AND_PREFILL":
+      switchPage(targetPage, params);
+      break;
+    case "CHANGE_LANGUAGE": {
+      const targetLang = params.language || params.lang || targetPage || "en";
+      changeLanguage(targetLang);
+      const sel = document.getElementById("lang-select");
+      if (sel) sel.value = targetLang;
+      break;
+    }
+    case "SET_FILTER":
+      if (params.horizon) {
+        const horizonBtn = document.querySelector(`.horizon-pill[data-days="${params.horizon}"]`);
+        horizonBtn?.click();
+      }
+      break;
+    default:
+      console.log("UI Action processed:", actionType, targetPage);
   }
 }
 
@@ -160,7 +195,7 @@ function updateChatMessage(msgId, text, workflowType, llmUsed, toolCalls = []) {
   const btn = el.querySelector(".tts-speak-btn");
   if (btn) {
     btn.addEventListener("click", () => {
-      handlePlayTTS(decodeURIComponent(btn.getAttribute("data-text")));
+      handlePlayTTS(decodeURIComponent(btn.getAttribute("data-text")), btn);
     });
   }
 
@@ -168,16 +203,88 @@ function updateChatMessage(msgId, text, workflowType, llmUsed, toolCalls = []) {
   if (container) container.scrollTop = container.scrollHeight;
 }
 
-async function handlePlayTTS(text) {
+let activeTTSAudio = null;
+let activeTTSBtn = null;
+
+async function handlePlayTTS(text, btn) {
+  // If clicked on currently active audio: toggle pause / resume
+  if (activeTTSAudio && activeTTSBtn === btn) {
+    if (activeTTSAudio.paused) {
+      activeTTSAudio.play();
+      btn.innerHTML = "⏸️ Pause";
+    } else {
+      activeTTSAudio.pause();
+      btn.innerHTML = "▶️ Resume";
+    }
+    return;
+  }
+
+  // If a different audio was already playing, stop and reset it
+  if (activeTTSAudio) {
+    activeTTSAudio.pause();
+    activeTTSAudio.currentTime = 0;
+    if (activeTTSBtn) activeTTSBtn.innerHTML = "🔊 Speak";
+    activeTTSAudio = null;
+    activeTTSBtn = null;
+  }
+
+  btn.innerHTML = "⏳ Generating Voice...";
+  btn.disabled = true;
+
   try {
-    const res = await api.assistant.tts({ text, language_code: "hi-IN" });
+    const isDevanagari = /[\u0900-\u097f]/.test(text);
+    let lang = "en-IN";
+    if (isDevanagari) {
+      const marathiTokens = ["आहे", "आहेत", "का", "किती", "मला", "माझ्या", "माझे", "हप्ता", "पाहिजे", "द्या", "घेऊन जा", "दाखवा", "बदला", "भरू", "शकतो", "शकता", "कर्ज", "करा", "नाही", "काय", "कसे", "सांगा", "बघा", "उघडा", "बचत", "मुद्दल", "व्याजदर", "कालावधी", "रोख", "प्रवाह", "होय", "शिल्लक"];
+      const hindiTokens = ["है", "हैं", "क्या", "कितना", "कितनी", "मुझे", "मेरे", "मेरी", "किस्त", "किस्तें", "चाहिए", "दीजिए", "ले चलो", "दिखाओ", "बदलो", "भर सकता", "भर सकते", "ऋण", "नहीं", "कैसे", "बताओ", "बचत", "मूलधन", "ब्याज", "अवधि", "नकदी", "प्रवाह", "हाँ", "अधिशेष"];
+      let mrCount = (text.match(/ळ/g) || []).length * 3;
+      marathiTokens.forEach(t => { if (text.includes(t)) mrCount++; });
+      let hiCount = 0;
+      hindiTokens.forEach(t => { if (text.includes(t)) hiCount++; });
+
+      if (mrCount > hiCount) {
+        lang = "mr-IN";
+      } else if (hiCount > mrCount) {
+        lang = "hi-IN";
+      } else {
+        lang = getCurrentLanguage() === "hi" ? "hi-IN" : "mr-IN";
+      }
+    } else {
+      if (getCurrentLanguage() === "mr") {
+        lang = "mr-IN";
+      } else if (getCurrentLanguage() === "hi") {
+        lang = "hi-IN";
+      }
+    }
+
+    const res = await api.assistant.tts({ text, language_code: lang });
+    btn.disabled = false;
+
     if (res && res.audio_base64) {
       const audio = new Audio("data:audio/wav;base64," + res.audio_base64);
-      audio.play();
+      activeTTSAudio = audio;
+      activeTTSBtn = btn;
+      btn.innerHTML = "⏸️ Pause";
+
+      audio.onended = () => {
+        btn.innerHTML = "🔊 Speak";
+        activeTTSAudio = null;
+        activeTTSBtn = null;
+      };
+      audio.onerror = () => {
+        btn.innerHTML = "🔊 Speak";
+        activeTTSAudio = null;
+        activeTTSBtn = null;
+      };
+
+      await audio.play();
     } else {
-      alert(res.message || "Voice playback requires SARVAM_API_KEY.");
+      btn.innerHTML = "🔊 Speak";
+      alert(res.message || "Voice playback requires active Sarvam configuration.");
     }
   } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = "🔊 Speak";
     console.warn("TTS playback error:", e);
   }
 }
@@ -195,7 +302,8 @@ async function toggleVoiceRecording() {
         const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
         const formData = new FormData();
         formData.append("file", audioBlob, "recording.wav");
-        formData.append("language_code", "hi-IN");
+        const lang = getCurrentLanguage() === "mr" ? "mr-IN" : (getCurrentLanguage() === "hi" ? "hi-IN" : "en-IN");
+        formData.append("language_code", lang);
 
         try {
           const res = await api.assistant.stt(formData);

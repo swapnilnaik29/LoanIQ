@@ -3,12 +3,17 @@
  */
 
 import { api } from "./api.js";
-import { getCurrentMerchantId, formatINR } from "./auth.js";
-import { openLoanDetailModal } from "./loans.js";
+import { getCurrentMerchantId, getCurrentMerchantProfile, formatINR } from "./auth.js";
 
 export async function loadDashboard() {
   const merchantId = getCurrentMerchantId();
   if (!merchantId) return;
+
+  // Immediate pre-fill from cached session to eliminate any flash of placeholder values
+  const cachedProfile = getCurrentMerchantProfile();
+  if (cachedProfile) {
+    renderProfileHeader(cachedProfile);
+  }
 
   try {
     // 1. Fetch Profile
@@ -19,11 +24,7 @@ export async function loadDashboard() {
     const opt = await api.merchants.getOptimization(merchantId);
     renderDebtSummary(opt);
 
-    // 3. Fetch Top Recommendations Preview
-    const recs = await api.merchants.getRecommendations(merchantId, 100000, null, 365);
-    renderTopRecommendations(recs);
-
-    // 4. Fetch Forecast Preview
+    // 3. Fetch Forecast Preview (Recommendations are exclusively evaluated on Recommendations page based on merchant criteria)
     const forecast = await api.merchants.getForecast(merchantId, 30);
     renderForecastPreview(forecast);
   } catch (err) {
@@ -65,53 +66,6 @@ function renderDebtSummary(opt) {
       alertContainer.style.display = "none";
     }
   }
-}
-
-function renderTopRecommendations(recs) {
-  const container = document.getElementById("dash-top-recs");
-  if (!container) return;
-
-  const list = Array.isArray(recs) ? recs : [];
-  const eligible = list.filter(r => r.is_eligible).slice(0, 3);
-  if (eligible.length === 0) {
-    container.innerHTML = `<p class="stat-subtext">No eligible loan offers matching baseline criteria. Check recommendations tab for full product list.</p>`;
-    return;
-  }
-
-  container.innerHTML = eligible.map(r => `
-    <div class="rec-card" data-loan-id="${r.loan_id}" style="margin-bottom:0.75rem; padding:1rem; cursor:pointer;" title="Click for details, cost pie chart & sliders">
-      <div class="rec-card-top">
-        <div>
-          <span class="rec-lender">${r.lender_name}</span>
-          <div class="rec-name" style="font-size:1.05rem;">${r.product_name} <span style="font-size:0.75rem; color:var(--primary-blue); font-weight:normal;">🔍</span></div>
-        </div>
-        <span class="badge badge-green">Probability: ${r.probability_percentage}</span>
-      </div>
-      <div class="rec-metrics-grid" style="padding:0.5rem 0.75rem;">
-        <div class="rec-metric-item">
-          <span class="rec-metric-label">Daily EMI</span>
-          <span class="rec-metric-val">${formatINR(r.estimated_daily_emi)}</span>
-        </div>
-        <div class="rec-metric-item">
-          <span class="rec-metric-label">Rate (APR)</span>
-          <span class="rec-metric-val">${r.annual_interest_rate}%</span>
-        </div>
-        <div class="rec-metric-item">
-          <span class="rec-metric-label">Total Interest</span>
-          <span class="rec-metric-val">${formatINR(r.estimated_total_interest)}</span>
-        </div>
-      </div>
-      <div class="rec-reason">${r.recommendation_reason}</div>
-    </div>
-  `).join("");
-
-  container.querySelectorAll(".rec-card").forEach(card => {
-    card.addEventListener("click", () => {
-      const lid = card.getAttribute("data-loan-id");
-      const prod = eligible.find(p => p.loan_id === lid);
-      if (prod) openLoanDetailModal(prod);
-    });
-  });
 }
 
 function renderForecastPreview(fc) {

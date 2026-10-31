@@ -76,15 +76,17 @@ def test_loan_recommendations_and_comparison():
 
 def test_agent_chat_deterministic():
     # Chat without external API key must still work and route intents
-    resp = client.post("/api/assistant/chat", json={
-        "merchant_id": "M001",
-        "message": "I need a 50,000 loan and can pay 300 daily EMI"
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["workflow_type"] == "LOAN_ACTION"
-    assert data["ui_action"] is not None
-    assert data["ui_action"]["target_page"] == "recommendations"
+    from unittest.mock import patch
+    with patch("backend.services.agent_service.OpenAIResponsesAdapter.is_configured", return_value=False):
+        resp = client.post("/api/assistant/chat", json={
+            "merchant_id": "M001",
+            "message": "I need a 50,000 loan and can pay 300 daily EMI"
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["workflow_type"] == "LOAN_ACTION"
+        assert data["ui_action"] is not None
+        assert data["ui_action"]["target_page"] == "recommendations"
 
 
 def test_translation_endpoint():
@@ -99,33 +101,38 @@ def test_translation_endpoint():
 
 def test_translation_caching_and_graceful_fallback():
     # Calling translation to Marathi/Hindi without API key should fall back to original strings
-    resp = client.post("/api/translation/translate", json={
-        "source_lang": "en",
-        "target_lang": "mr",
-        "strings": {"test_key_1": "Apply Now", "test_key_2": "Dashboard"}
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "test_key_1" in data["translations"]
-    # Even if API key absent, it returns original strings gracefully without 500 error
-    assert data["translations"]["test_key_1"] == "Apply Now"
+    from unittest.mock import patch
+    with patch("backend.services.translation.settings.SARVAM_API_KEY", ""):
+        with patch("backend.services.translation.settings.GOOGLE_TRANSLATE_API_KEY", ""):
+            resp = client.post("/api/translation/translate", json={
+                "source_lang": "en",
+                "target_lang": "mr",
+                "strings": {"uncached_key_1": "Uncached Test Text 999", "uncached_key_2": "Uncached Dashboard 888"}
+            })
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "uncached_key_1" in data["translations"]
+            # Without API key and uncached, it returns original strings gracefully without 500 error
+            assert data["translations"]["uncached_key_1"] == "Uncached Test Text 999"
 
 
 def test_agent_various_natural_language_queries():
-    # Lakh pattern
-    resp1 = client.post("/api/assistant/chat", json={
-        "merchant_id": "M001",
-        "message": "I need a 5 lakh loan with 2000 daily EMI"
-    })
-    assert resp1.status_code == 200
-    assert resp1.json()["extracted_data"]["amount"] == 500000.0
-    assert resp1.json()["extracted_data"]["emi"] == 2000.0
+    from unittest.mock import patch
+    with patch("backend.services.agent_service.OpenAIResponsesAdapter.is_configured", return_value=False):
+        # Lakh pattern
+        resp1 = client.post("/api/assistant/chat", json={
+            "merchant_id": "M001",
+            "message": "I need a 5 lakh loan with 2000 daily EMI"
+        })
+        assert resp1.status_code == 200
+        assert resp1.json()["extracted_data"]["amount"] == 500000.0
+        assert resp1.json()["extracted_data"]["emi"] == 2000.0
 
-    # Finance Q&A query
-    resp2 = client.post("/api/assistant/chat", json={
-        "merchant_id": "M001",
-        "message": "What is daily EMI and how does it work?"
-    })
-    assert resp2.status_code == 200
-    assert "Daily EMI" in resp2.json()["reply_text"]
-    assert resp2.json()["workflow_type"] == "FINANCE_QA"
+        # Finance Q&A query
+        resp2 = client.post("/api/assistant/chat", json={
+            "merchant_id": "M001",
+            "message": "What is daily EMI and how does it work?"
+        })
+        assert resp2.status_code == 200
+        assert "Daily EMI" in resp2.json()["reply_text"]
+        assert resp2.json()["workflow_type"] == "FINANCE_QA"

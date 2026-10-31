@@ -2,7 +2,7 @@
  * LoanIQ Application Controller and Router.
  */
 
-import { requireAuth, handleLogout, getCurrentMerchantId, formatINR } from "./auth.js";
+import { requireAuth, handleLogout, getCurrentMerchantId, getCurrentMerchantProfile, formatINR } from "./auth.js";
 import { initI18n } from "./i18n.js";
 import { api } from "./api.js";
 import { loadDashboard } from "./dashboard.js";
@@ -54,6 +54,20 @@ export function switchPage(pageName, params = {}) {
 async function loadProfilePage() {
   const merchantId = getCurrentMerchantId();
   if (!merchantId) return;
+
+  const cachedProfile = getCurrentMerchantProfile();
+  if (cachedProfile) {
+    document.getElementById("prof-biz-name").textContent = cachedProfile.business_name || "-";
+    document.getElementById("prof-id").textContent = cachedProfile.merchant_id || "-";
+    document.getElementById("prof-type").textContent = (cachedProfile.merchant_type || "").replace("_", " ").toUpperCase() || "-";
+    document.getElementById("prof-city").textContent = cachedProfile.city ? `${cachedProfile.city} (${cachedProfile.city_tier})` : "-";
+    document.getElementById("prof-age").textContent = cachedProfile.business_age_months ? `${cachedProfile.business_age_months} months` : "-";
+    document.getElementById("prof-sales").textContent = cachedProfile.monthly_sales_reference ? formatINR(cachedProfile.monthly_sales_reference) : "-";
+    document.getElementById("prof-profit").textContent = cachedProfile.monthly_profit_reference ? formatINR(cachedProfile.monthly_profit_reference) : "-";
+    document.getElementById("prof-score").textContent = cachedProfile.credit_score || "-";
+    document.getElementById("prof-opening-bal").textContent = cachedProfile.opening_cash_balance ? formatINR(cachedProfile.opening_cash_balance) : "-";
+    document.getElementById("prof-lang").textContent = cachedProfile.preferred_language || "-";
+  }
 
   try {
     const profile = await api.merchants.getProfile(merchantId);

@@ -11,7 +11,8 @@ class STTResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    language_code: Optional[str] = "hi-IN"
+    language_code: Optional[str] = "mr-IN"
+    speaker: Optional[str] = None
 
 
 class TTSResponse(BaseModel):

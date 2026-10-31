@@ -10,6 +10,7 @@
 import { api } from "./api.js";
 import { getCurrentMerchantId, formatINR } from "./auth.js";
 import { switchPage } from "./app.js";
+import { t } from "./i18n.js";
 
 let currentRecommendations = [];
 let selectedLoanIds = new Set();
@@ -82,8 +83,8 @@ export function renderRecommendations() {
   container.innerHTML = listToRender.map(r => {
     const isChecked = selectedLoanIds.has(r.loan_id);
     const eligBadge = r.is_eligible
-      ? `<span class="badge badge-green">Eligible</span>`
-      : `<span class="badge badge-red">Ineligible</span>`;
+      ? `<span class="badge badge-green">${t("eligible_badge", "Eligible")}</span>`
+      : `<span class="badge badge-red">${t("ineligible_badge", "Ineligible")}</span>`;
 
     return `
       <div class="rec-card ${r.is_eligible ? '' : 'ineligible'}" data-loan-id="${r.loan_id}" style="cursor:pointer;" title="Click to view details, cost pie chart, and interactive sliders">
@@ -92,54 +93,54 @@ export function renderRecommendations() {
             <span class="rec-lender">${r.lender_name} • ${r.loan_id}</span>
             <div class="rec-name" style="display:flex; align-items:center; gap:0.5rem;">
               <span>${r.product_name}</span>
-              <span style="font-size:0.75rem; color:var(--primary-blue); font-weight:600;">🔍 Click for Interactive Modal</span>
+              <span style="font-size:0.75rem; color:var(--primary-blue); font-weight:600;">${t("click_for_modal", "🔍 Click for Interactive Modal")}</span>
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:0.5rem;">
             ${eligBadge}
-            <span class="badge badge-blue">Est. Acceptance: ${r.probability_percentage}</span>
+            <span class="badge badge-blue">${t("acceptance_prob_label", "Est. Acceptance:")} ${r.probability_percentage}</span>
             <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; cursor:pointer; margin-left:0.5rem;" onclick="event.stopPropagation();">
               <input type="checkbox" class="compare-checkbox" data-loan-id="${r.loan_id}" ${isChecked ? 'checked' : ''}>
-              Compare
+              ${t("compare_title", "Compare")}
             </label>
           </div>
         </div>
 
         <div class="rec-metrics-grid">
           <div class="rec-metric-item">
-            <span class="rec-metric-label">Daily EMI</span>
+            <span class="rec-metric-label">${t("daily_emi_label", "Daily EMI")}</span>
             <span class="rec-metric-val">${formatINR(r.estimated_daily_emi)}</span>
           </div>
           <div class="rec-metric-item">
-            <span class="rec-metric-label">Interest Rate</span>
+            <span class="rec-metric-label">${t("interest_rate_label", "Interest Rate")}</span>
             <span class="rec-metric-val">${r.annual_interest_rate}% APR</span>
           </div>
           <div class="rec-metric-item">
-            <span class="rec-metric-label">Total Interest</span>
+            <span class="rec-metric-label">${t("total_interest_label", "Total Interest")}</span>
             <span class="rec-metric-val">${formatINR(r.estimated_total_interest)}</span>
           </div>
           <div class="rec-metric-item">
-            <span class="rec-metric-label">Processing Fee</span>
+            <span class="rec-metric-label">${t("processing_fee_label", "Processing Fee")}</span>
             <span class="rec-metric-val">${formatINR(r.estimated_processing_fee)} (${r.processing_fee_pct}%)</span>
           </div>
           <div class="rec-metric-item">
-            <span class="rec-metric-label">Prepayment Fee</span>
+            <span class="rec-metric-label">${t("prepayment_fee_label", "Prepayment Fee")}</span>
             <span class="rec-metric-val">${r.prepayment_fee_pct}%</span>
           </div>
           <div class="rec-metric-item">
-            <span class="rec-metric-label">Affordability</span>
+            <span class="rec-metric-label">${t("affordability_label", "Affordability")}</span>
             <span class="rec-metric-val" style="font-size:0.85rem; color:${r.affordability_status.includes('High') ? '#ef4444' : '#10b981'};">${r.affordability_status}</span>
           </div>
         </div>
 
         ${r.is_eligible
-          ? `<div class="rec-reason"><strong>Why this product:</strong> ${r.recommendation_reason}</div>`
+          ? `<div class="rec-reason"><strong>${t("why_product_title", "Why this product:")}</strong> ${r.recommendation_reason}</div>`
           : `<div class="rec-ineligible-reason"><strong>Eligibility requirements failed:</strong> ${r.failed_reasons.join(" • ")}</div>`
         }
 
         <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:var(--text-secondary); margin-top:0.5rem;">
           <span>Allowed Range: ₹${r.min_amount.toLocaleString()} - ₹${r.max_amount.toLocaleString()} | Tenure: ${r.min_tenure_days}-${r.max_tenure_days} days</span>
-          <span style="color:var(--primary-blue); font-weight:600;">👆 Click to Open Details, Pie Chart & Sliders</span>
+          <span style="color:var(--primary-blue); font-weight:600;">👆 ${t("click_for_modal", "Click to Open Details, Pie Chart & Sliders")}</span>
         </div>
       </div>
     `;
@@ -585,3 +586,10 @@ function setText(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text;
 }
+
+// Re-render recommendations when application language changes
+window.addEventListener("languageChanged", () => {
+  if (currentRecommendations && currentRecommendations.length > 0) {
+    renderRecommendations();
+  }
+});

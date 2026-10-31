@@ -191,7 +191,105 @@ def recommend_loans(
 
     # Sort descending by rank score
     items.sort(key=lambda x: x.rank_score, reverse=True)
+
+    # Enrich products with LLM-evaluated Affordability Status and Recommendation Fit
+    enrich_recommendations_with_llm(merchant_id, profile, forecast, items, requested_amount, tenure_days)
+
     return items
+
+
+def enrich_recommendations_with_llm(
+    merchant_id: str,
+    profile: Any,
+    forecast: Any,
+    items: List[LoanRecommendationItem],
+    requested_amount: float,
+    tenure_days: int
+) -> None:
+    """
+    Enriches candidate loan items with LLM-evaluated Affordability Status and Recommendation Fit.
+    Uses GPT-5.6 Luna with persistent caching. Gracefully falls back to deterministic strings on failure.
+    """
+    from backend.services.openai_adapter import OpenAIResponsesAdapter
+    from backend.services.cache_service import get_cached_ai_response, set_cached_ai_response
+
+    if not OpenAIResponsesAdapter.is_configured():
+        return
+
+    # Evaluate the top candidates
+    target_items = items[:6]
+    if not target_items:
+        return
+
+    product_ids_key = "-".join(sorted(it.loan_id for it in target_items))
+    cache_msg_key = f"eval_{int(requested_amount)}_{int(tenure_days)}_{product_ids_key}"
+    data_version = f"cs_{profile.credit_score}_sales_{int(profile.monthly_sales_reference)}"
+
+    cached_eval = get_cached_ai_response(
+        merchant_id=merchant_id,
+        intent="LOAN_LLM_EVALUATION",
+        message=cache_msg_key,
+        data_version=data_version
+    )
+    if cached_eval and isinstance(cached_eval, dict):
+        evaluations = cached_eval.get("evaluations", {})
+        for it in target_items:
+            if it.loan_id in evaluations:
+                ev = evaluations[it.loan_id]
+                if ev.get("affordability_status"):
+                    it.affordability_status = ev["affordability_status"]
+                if ev.get("recommendation_fit"):
+                    it.recommendation_reason = ev["recommendation_fit"]
+        return
+
+    merchant_summary = {
+        "merchant_id": merchant_id,
+        "business_name": profile.business_name,
+        "business_type": profile.merchant_type,
+        "city": profile.city,
+        "monthly_sales_ref": profile.monthly_sales_reference,
+        "credit_score": profile.credit_score,
+        "existing_daily_emi": profile.existing_daily_emi,
+        "projected_avg_daily_net_cashflow": forecast.avg_daily_net_cashflow
+    }
+
+    candidate_loans = []
+    for it in target_items:
+        net_margin = round(forecast.avg_daily_net_cashflow - (profile.existing_daily_emi + it.estimated_daily_emi), 2)
+        candidate_loans.append({
+            "loan_id": it.loan_id,
+            "product_name": it.product_name,
+            "lender_name": it.lender_name,
+            "annual_interest_rate": it.annual_interest_rate,
+            "daily_emi": it.estimated_daily_emi,
+            "processing_fee_pct": it.processing_fee_pct,
+            "prepayment_fee_pct": it.prepayment_fee_pct,
+            "acceptance_prob": it.probability_percentage,
+            "net_daily_margin_after_new_emi": net_margin,
+            "is_eligible": it.is_eligible,
+            "failed_reasons": it.failed_reasons
+        })
+
+    try:
+        evaluations = OpenAIResponsesAdapter.evaluate_loans_with_luna(merchant_summary, candidate_loans)
+        if evaluations and isinstance(evaluations, dict):
+            for it in target_items:
+                if it.loan_id in evaluations:
+                    ev = evaluations[it.loan_id]
+                    if ev.get("affordability_status"):
+                        it.affordability_status = ev["affordability_status"]
+                    if ev.get("recommendation_fit"):
+                        it.recommendation_reason = ev["recommendation_fit"]
+
+            set_cached_ai_response(
+                merchant_id=merchant_id,
+                intent="LOAN_LLM_EVALUATION",
+                message=cache_msg_key,
+                response_payload={"evaluations": evaluations},
+                data_version=data_version
+            )
+    except Exception as e:
+        print(f"Error enriching loan recommendations with LLM: {e}")
 
 
 def compare_loans(
@@ -204,6 +302,12 @@ def compare_loans(
     selected = [r for r in all_recs if r.loan_id in loan_ids]
     if not selected:
         selected = all_recs[:4]  # default to top 4 if none selected
+
+    # Ensure all selected comparison products are evaluated by the LLM
+    profile = get_merchant_profile(merchant_id)
+    forecast = get_merchant_forecast(merchant_id, horizon_days=30)
+    if profile and forecast:
+        enrich_recommendations_with_llm(merchant_id, profile, forecast, selected, requested_amount or 100000.0, tenure_days or 365)
 
     eligible_selected = [s for s in selected if s.is_eligible]
 

@@ -1,5 +1,5 @@
 /**
- * Authentication and Session Management for LoanIQ Demo.
+ * Authentication and Session Management for LoanIQ.
  */
 
 import { api } from "./api.js";

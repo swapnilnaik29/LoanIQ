@@ -17,7 +17,7 @@ def health_check():
         "status": "healthy",
         "app_name": "LoanIQ",
         "version": "1.0.0",
-        "environment": "demo-mvp"
+        "environment": "production"
     }
 
 

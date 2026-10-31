@@ -39,6 +39,10 @@ from backend.services.acceptance_model import predict_loan_acceptance_probabilit
 from backend.services.forecasting import get_merchant_forecast
 from backend.services.loan_optimizer import simulate_loan, get_merchant_optimization
 from backend.services.emi_calculator import calculate_loan_cost
+from backend.services.scope_gate import check_financial_scope, GENERIC_OUT_OF_SCOPE_RESPONSE
+from backend.services.cache_service import get_cached_ai_response, set_cached_ai_response
+from backend.services.translation import translate_single_text
+from backend.services.openai_adapter import OpenAIResponsesAdapter
 
 # Bounded finance knowledge definitions for Finance Q&A
 BOUNDED_FINANCE_QA = {
@@ -241,11 +245,112 @@ def extract_numeric_loan_requirement(text: str) -> Tuple[Optional[float], Option
     return amount, emi, tenure
 
 
-def classify_intent(text: str, page_context: Optional[PageContext]) -> str:
+def detect_query_language(text: str) -> str:
+    """
+    Detects whether text is Marathi ('mr'), Hindi ('hi'), or English ('en').
+    Uses Devanagari character presence and distinct lexical discriminant tokens.
+    """
+    if not text:
+        return "en"
+
+    # Check for Devanagari Unicode range (\u0900 - \u097F)
+    devanagari_chars = [c for c in text if '\u0900' <= c <= '\u097f']
+    if not devanagari_chars:
+        return "en"
+
+    # Distinct Marathi markers (lexical + unique character 'ळ')
+    marathi_markers = [
+        "आहे", "आहेत", "होते", "होती", "का", "किती", "मला", "माझ्या", "माझे", "माझी",
+        "हप्ता", "पाहिजे", "द्या", "घेऊन जा", "दाखवा", "बदला", "भरू", "शकतो", "शकता",
+        "कर्ज", "करा", "नाही", "काय", "कसे", "कोणते", "सांगा", "नका", "बघा", "उघडा",
+        "आणि", "किंवा", "येथे", "कृपया", "करावे", "मिळेल", "लागेल", "होय", "जास्त", "अधिक", "सध्याच्या"
+    ]
+    marathi_score = sum(text.count(marker) for marker in marathi_markers) + (text.count('ळ') * 4)
+
+    # Distinct Hindi markers
+    hindi_markers = [
+        "है", "हैं", "था", "थी", "थे", "क्या", "कितना", "कितनी", "कितने", "मुझे",
+        "मेरे", "मेरी", "मेरा", "किस्त", "किस्तें", "चाहिए", "दीजिए", "ले चलो", "दिखाओ",
+        "बदलो", "भर सकता", "भर सकते", "ऋण", "नहीं", "कैसे", "कौनसा", "बताओ", "और",
+        "या", "यहाँ", "कृपया", "सकता", "सकते", "सकती", "हूँ", "होगा", "मिलेगा", "हाँ", "ज्यादा", "मौजूदा"
+    ]
+    hindi_score = sum(text.count(marker) for marker in hindi_markers)
+
+    if marathi_score > hindi_score:
+        return "mr"
+    elif hindi_score > marathi_score:
+        return "hi"
+    else:
+        if any(w in text for w in ["कर्ज", "हप्ता", "ईएमआय"]):
+            return "mr"
+        return "hi"
+
+
+def extract_target_language(text: str) -> Optional[str]:
+    """
+    Extracts target language ('mr', 'hi', 'en') when user requests language change.
+    Handles natural phrases in English, Hindi, and Marathi.
+    """
     lower = text.lower()
 
+    # Marathi switch phrases
+    if any(k in lower for k in [
+        "change language to marathi", "switch language to marathi", "set language to marathi",
+        "change to marathi", "switch to marathi", "speak in marathi", "talk in marathi",
+        "मराठी करा", "भाषा मराठी करा", "मराठी भाषा करा", "मराठीत बोला", "मराठी मध्ये", "मराठीत",
+        "मराठी भाषा", "मराठी पाहिजे"
+    ]):
+        return "mr"
+
+    # Hindi switch phrases
+    if any(k in lower for k in [
+        "change language to hindi", "switch language to hindi", "set language to hindi",
+        "change to hindi", "switch to hindi", "speak in hindi", "talk in hindi",
+        "हिंदी में बदलो", "हिंदी करो", "हिंदी भाषा", "भाषा हिंदी करो", "हिंदी में बताओ",
+        "हिंदी में बात", "हिंदी में", "हिन्दी करो", "हिन्दी में बदलो"
+    ]):
+        return "hi"
+
+    # English switch phrases
+    if any(k in lower for k in [
+        "change language to english", "switch language to english", "set language to english",
+        "change to english", "switch to english", "speak in english", "talk in english",
+        "अंग्रेजी में बदलो", "अंग्रेजी करो", "अंग्रेजी भाषा", "इंग्रजी करा", "इंग्लिश करा", "इंग्रजीत"
+    ]):
+        return "en"
+
+    # General Regex: "change/switch/set language to/in (marathi|hindi|english)"
+    m = re.search(r'(?:change|switch|set)\s*(?:the\s*)?language\s*(?:to|in)?\s*(marathi|hindi|english|mr|hi|en)', lower)
+    if m:
+        target = m.group(1)
+        if "marathi" in target or target == "mr":
+            return "mr"
+        if "hindi" in target or target == "hi":
+            return "hi"
+        if "english" in target or target == "en":
+            return "en"
+
+    return None
+
+
+def classify_intent(text: str, page_context: Optional[PageContext]) -> str:
+    # 0. Check language change
+    if extract_target_language(text) is not None:
+        return "CHANGE_LANGUAGE"
+
+    lower = text.lower()
+
+    # Pay more EMI / Prepayment feasibility query
+    if any(k in lower for k in [
+        "pay more emi", "can i pay more", "increase emi", "pay higher emi",
+        "how much emi can i pay", "extra emi", "how much?", "how much emi",
+        "prepay", "prepayment", "जास्त ईएमआय", "अधिक ईएमआय", "ईएमआय वाढवू", "जास्त हप्ता",
+        "ज्यादा ईएमआई", "अधिक ईएमआई", "ईएमआई बढ़ा", "ज्यादा किस्त", "अधिक किस्त"
+    ]):
+        return "PAY_MORE_EMI"
+
     # Loan action intent
-    if any(k in lower for k in ["need a loan", "want a loan", "get a loan", "apply for", "borrow", "lakh", "afford", "can pay", "suggest a loan"]):
+    if any(k in lower for k in ["need a loan", "want a loan", "get a loan", "apply for", "borrow", "lakh", "afford", "can pay", "suggest a loan", "recommend a loan", "recommend loan"]):
         return "LOAN_ACTION"
 
     # Comparison intent
@@ -253,11 +358,18 @@ def classify_intent(text: str, page_context: Optional[PageContext]) -> str:
         return "COMPARISON_EXPLANATION"
 
     # Navigation intent
-    if any(k in lower for k in ["go to forecast", "open forecast", "show forecast", "go to optimizer", "open optimizer", "view profile"]):
+    if any(k in lower for k in [
+        "take me to", "navigate to", "open page", "go to", "show me", "view page",
+        "open forecast", "go to forecast", "show forecast",
+        "open optimizer", "go to optimizer", "show optimizer",
+        "open recommendations", "go to recommendations", "show offers",
+        "open profile", "go to profile",
+        "घेऊन जा", "उघडा", "दाखवा", "चला", "ले चलो", "खोलो"
+    ]):
         return "NAVIGATION"
 
     # Finance Q&A intent
-    if any(k in lower for k in ["what is", "how does", "how is", "explain", "meaning of", "penalty", "prepayment", "reducing balance"]):
+    if any(k in lower for k in ["what is", "how does", "how is", "explain", "meaning of", "penalty", "prepayment", "reducing balance", "daily emi"]):
         return "FINANCE_QA"
 
     return "GENERAL"
@@ -278,20 +390,109 @@ class AgentService:
                 llm_used=False
             )
 
-        history = get_session_history(merchant_id, req.session_id or "default")
-        intent = classify_intent(req.message, req.page_context)
-        api_key = settings.OPENAI_API_KEY.strip()
+        # 0. Check language change request first (deterministic, instant response)
+        target_lang = extract_target_language(req.message)
+        if target_lang:
+            messages = {
+                "mr": "भाषा यशस्वीरित्या मराठीत बदलली आहे. मी तुम्हाला कर्ज, ईएमआय आणि वित्तामध्ये कशी मदत करू शकतो?",
+                "hi": "भाषा सफलतापूर्वक हिंदी में बदल दी गई है। मैं आपकी ऋण, ईएमआई और वित्त संबंधी क्या सहायता कर सकता हूँ?",
+                "en": "Language has been successfully changed to English. How can I assist you with your loans, EMIs, and finances today?"
+            }
+            reply = messages.get(target_lang, messages["en"])
+            ui_action = UIAction(
+                action_type="CHANGE_LANGUAGE",
+                target_page=req.page_context.current_page if req.page_context else "dashboard",
+                parameters={"language": target_lang}
+            )
+            response = AgentChatResponse(
+                reply_text=reply,
+                workflow_type="CHANGE_LANGUAGE",
+                llm_used=False,
+                ui_action=ui_action,
+                suggested_prompts=(
+                    ["माझे सक्रिय कर्ज दाखवा", "३० दिवसांचा अंदाज", "नवीन कर्ज शोधा"] if target_lang == "mr"
+                    else (["मेरे सक्रिय ऋण दिखाओ", "३० दिनों का पूर्वानुमान", "नया ऋण खोजें"] if target_lang == "hi"
+                    else ["Show my active loans", "Check 30-day forecast", "Recommend loans"])
+                )
+            )
+            cls._save_turn(merchant_id, req.session_id or "default", [], req.message, reply)
+            return response
 
-        # If OpenAI API Key is present, attempt LLM Reasoning Workflow
-        if api_key:
+        # 1. Deterministic Scope Gate Check (Reject off-topic questions without external API calls)
+        in_scope, refusal_msg = check_financial_scope(req.message)
+        if not in_scope:
+            return AgentChatResponse(
+                reply_text=refusal_msg or GENERIC_OUT_OF_SCOPE_RESPONSE,
+                workflow_type="OUT_OF_SCOPE",
+                llm_used=False,
+                suggested_prompts=["I need a ₹1 lakh loan", "Compare top loans", "Check my cashflow forecast"]
+            )
+
+        # 2. Language Gateway: Detect Language (Marathi vs Hindi vs English)
+        detected_lang = detect_query_language(req.message)
+        is_devanagari = (detected_lang in ["mr", "hi"])
+        normalized_english_message = req.message
+        if is_devanagari:
             try:
-                return cls._run_openai_workflow(req, intent, profile, history)
+                normalized_english_message = translate_single_text(req.message, source_lang=detected_lang, target_lang="en")
             except Exception as e:
-                # Graceful degradation if LLM call fails
-                print(f"OpenAI call failed ({str(e)}). Falling back to deterministic agent workflow.")
+                print(f"Input translation warning: {e}")
 
-        # Deterministic Agent Workflows (Works completely API-key-free!)
-        return cls._run_deterministic_workflow(req, intent, profile, history)
+        history = get_session_history(merchant_id, req.session_id or "default")
+        intent = classify_intent(normalized_english_message, req.page_context)
+
+        # Financial data version for safe response caching
+        data_version = f"cs_{profile.credit_score}_sales_{int(profile.monthly_sales_reference)}"
+
+        # 3. Check Merchant-Scoped Response Cache (Language-Isolated)
+        cache_key_msg = f"{detected_lang}:{req.message}"
+        cached_payload = get_cached_ai_response(merchant_id, intent, cache_key_msg, data_version=data_version)
+        if cached_payload:
+            return AgentChatResponse(**cached_payload)
+
+        # 4. If OpenAI API Key is present, attempt Responses API Workflow with GPT-5.6 Luna
+        response = None
+        if OpenAIResponsesAdapter.is_configured():
+            try:
+                # If merchant speaks in Hindi or Marathi, pass original message and set strict language directive!
+                llm_prompt = req.message if is_devanagari else normalized_english_message
+                response = cls._run_openai_workflow(req, intent, profile, history, llm_prompt, detected_lang=detected_lang)
+            except Exception as e:
+                print(f"OpenAI Responses API call failed ({str(e)}). Falling back to deterministic agent workflow.")
+
+        # 5. Deterministic Agent Workflows (Works completely API-key-free!)
+        if not response:
+            req_copy = AgentChatRequest(
+                merchant_id=req.merchant_id,
+                message=normalized_english_message,
+                session_id=req.session_id,
+                page_context=req.page_context
+            )
+            response = cls._run_deterministic_workflow(req_copy, intent, profile, history, detected_lang=detected_lang)
+
+            # Output Gateway for deterministic fallback:
+            # If the user asked in Hindi or Marathi and the reply isn't already in Devanagari, translate it!
+            if is_devanagari and not any('\u0900' <= c <= '\u097f' for c in response.reply_text):
+                try:
+                    translated_reply = translate_single_text(response.reply_text, source_lang="en", target_lang=detected_lang)
+                    response.reply_text = translated_reply
+                except Exception as e:
+                    print(f"Output translation warning: {e}")
+
+        # 6. Store in safe response cache
+        try:
+            set_cached_ai_response(
+                merchant_id=merchant_id,
+                intent=intent,
+                message=cache_key_msg,
+                response_payload=response.model_dump(),
+                data_version=data_version
+            )
+        except Exception as e:
+            print(f"Response cache save error: {e}")
+
+        cls._save_turn(merchant_id, req.session_id or "default", history, req.message, response.reply_text)
+        return response
 
     @classmethod
     def _run_deterministic_workflow(
@@ -299,7 +500,8 @@ class AgentService:
         req: AgentChatRequest,
         intent: str,
         profile: Any,
-        history: List[Dict[str, str]]
+        history: List[Dict[str, str]],
+        detected_lang: str = "en"
     ) -> AgentChatResponse:
         merchant_id = req.merchant_id
         text = req.message
@@ -437,6 +639,82 @@ class AgentService:
             cls._save_turn(merchant_id, req.session_id or "default", history, text, reply)
             return response
 
+        # Workflow: PAY_MORE_EMI (Loan Optimization & Surplus Capacity)
+        if intent == "PAY_MORE_EMI":
+            opt = ToolRegistry.optimize_existing_loans(merchant_id)
+            fc = ToolRegistry.get_cashflow_forecast(merchant_id, 30)
+            avg_daily_cf = fc["avg_daily_net_cashflow"]
+            curr_emi = opt["total_current_daily_emi"]
+            surplus = round(avg_daily_cf - curr_emi, 2)
+            active_cnt = opt["active_loans_count"]
+
+            if surplus > 50:
+                safe_additional = round(surplus * 0.75, 2)
+                if detected_lang == "mr":
+                    reply = (
+                        f"**होय, आपण आपल्या सध्याच्या कर्जासाठी दररोजचा ईएमआय सहजपणे वाढवू शकता.**\n\n"
+                        f"• **सध्याचा एकूण दैनिक ईएमआय:** ₹{curr_emi:,.2f}/दिवस ({active_cnt} सक्रिय कर्ज खाती)\n"
+                        f"• **३० दिवसांचा अंदाजित दैनिक निव्वळ रोख प्रवाह:** ₹{avg_daily_cf:,.2f}/दिवस\n"
+                        f"• **उपलब्ध दैनिक रोख प्रवाह शिल्लक (सरप्लस):** ₹{surplus:,.2f}/दिवस\n\n"
+                        f"💡 **सल्लागार क्षमता:** आपण दैनंदिन हप्ता सुरक्षितपणे **₹{safe_additional:,.2f}/दिवस** पर्यंत वाढवू शकता, "
+                        f"ज्यामुळे दैनंदिन कामासाठी सुरक्षित राखीव रक्कम शिल्लक राहील. "
+                        f"दैनिक हप्ता वाढवल्याने कर्जाचा कालावधी जलद संपेल आणि व्याजात मोठी बचत होईल."
+                    )
+                elif detected_lang == "hi":
+                    reply = (
+                        f"**हाँ, आप अपने मौजूदा ऋणों के लिए दैनिक ईएमआई आराम से बढ़ा सकते हैं।**\n\n"
+                        f"• **वर्तमान कुल दैनिक ईएमआई:** ₹{curr_emi:,.2f}/दिन ({active_cnt} सक्रिय ऋण खाते)\n"
+                        f"• **30 दिनों का अनुमानित दैनिक शुद्ध कैश-फ्लो:** ₹{avg_daily_cf:,.2f}/दिन\n"
+                        f"• **उपलब्ध दैनिक नकदी अधिशेष (सरप्लस):** ₹{surplus:,.2f}/दिन\n\n"
+                        f"💡 **सलाहकार क्षमता:** आप सुरक्षित रूप से अपने दैनिक भुगतान को **₹{safe_additional:,.2f}/दिन** तक बढ़ा सकते हैं, "
+                        f"जिससे अप्रत्याशित व्यावसायिक खर्चों के लिए पर्याप्त सुरक्षा बफर बना रहेगा। "
+                        f"दैनिक भुगतान बढ़ाने से शेष ऋण अवधि तेजी से घटेगी और कुल ब्याज की भारी बचत होगी।"
+                    )
+                else:
+                    reply = (
+                        f"**Yes, you can comfortably pay more daily EMI towards your existing loans.**\n\n"
+                        f"• **Current Total Daily EMI:** ₹{curr_emi:,.2f}/day across {active_cnt} active loan account(s)\n"
+                        f"• **30-Day Projected Daily Net Cashflow:** ₹{avg_daily_cf:,.2f}/day\n"
+                        f"• **Daily Cashflow Surplus Available:** ₹{surplus:,.2f}/day\n\n"
+                        f"💡 **Advisory Capacity:** You can safely increase your daily payment by up to **₹{safe_additional:,.2f}/day**, "
+                        f"leaving a healthy reserve buffer for operational fluctuations. "
+                        f"Increasing daily payments reduces remaining loan tenure and substantially cuts total interest costs."
+                    )
+            else:
+                if detected_lang == "mr":
+                    reply = (
+                        f"तुमच्या ३० दिवसांच्या अंदाजानुसार (₹{avg_daily_cf:,.2f}/दिवस) आणि सक्रिय दैनिक ईएमआय (₹{curr_emi:,.2f}/दिवस) पाहता, "
+                        f"तुमचा शिल्लक रोख बफर फक्त ₹{max(0.0, surplus):,.2f}/दिवस आहे. "
+                        f"रोख प्रवाहावर ताण येऊ नये म्हणून सध्या दैनिक ईएमआय वाढवणे योग्य नाही."
+                    )
+                elif detected_lang == "hi":
+                    reply = (
+                        f"आपके 30 दिनों के पूर्वानुमान (₹{avg_daily_cf:,.2f}/दिन) और सक्रिय दैनिक ईएमआई (₹{curr_emi:,.2f}/दिन) के आधार पर, "
+                        f"आपका शेष नकदी बफर केवल ₹{max(0.0, surplus):,.2f}/दिन है। "
+                        f"कैश-फ्लो पर दबाव से बचने के लिए फिलहाल दैनिक ईएमआई बढ़ाना उचित नहीं है।"
+                    )
+                else:
+                    reply = (
+                        f"Based on your 30-day forecast (₹{avg_daily_cf:,.2f}/day) and active daily EMI (₹{curr_emi:,.2f}/day), "
+                        f"your remaining cash buffer is ₹{max(0.0, surplus):,.2f}/day. "
+                        f"Increasing your daily EMI is not recommended right now to prevent cashflow strain."
+                    )
+
+            ui_action = UIAction(action_type="NAVIGATE", target_page="optimizer", parameters={})
+            response = AgentChatResponse(
+                reply_text=reply,
+                workflow_type="OPTIMIZATION",
+                llm_used=False,
+                ui_action=ui_action,
+                suggested_prompts=(
+                    ["कर्ज ऑप्टिमायझर दाखवा", "३० दिवसांचा रोख प्रवाह अंदाज", "कर्ज उत्पादने"] if detected_lang == "mr"
+                    else (["ऋण अनुकूलक दिखाओ", "30-दिवसीय कैश-फ्लो पूर्वानुमान", "ऋण उत्पाद"] if detected_lang == "hi"
+                    else ["Take me to loan optimizer", "Show 30-day forecast", "Compare all loan products"])
+                )
+            )
+            cls._save_turn(merchant_id, req.session_id or "default", history, text, reply)
+            return response
+
         # Workflow 4: FINANCE Q&A
         if intent == "FINANCE_QA":
             lower = text.lower()
@@ -495,16 +773,39 @@ class AgentService:
         req: AgentChatRequest,
         intent: str,
         profile: Any,
-        history: List[Dict[str, str]]
+        history: List[Dict[str, str]],
+        reasoning_message: str,
+        detected_lang: str = "en"
     ) -> AgentChatResponse:
-        """Execute LLM workflow using OpenAI Responses API with structured tools and bounded context."""
-        api_key = settings.OPENAI_API_KEY.strip()
-        model = settings.OPENAI_MODEL or "gpt-4o-mini"
+        """Execute LLM workflow using OpenAI Responses API with GPT-5.6 Luna, structured tools, and bounded context."""
         merchant_id = req.merchant_id
 
         # Pre-fetch merchant financial summary to bound the prompt context
         opt = ToolRegistry.optimize_existing_loans(merchant_id)
         fc = ToolRegistry.get_cashflow_forecast(merchant_id, 30)
+
+        daily_surplus = round(fc['avg_daily_net_cashflow'] - opt['total_current_daily_emi'], 2)
+        safe_additional_emi = max(0.0, round(daily_surplus * 0.75, 2))
+
+        # Dynamic Language Directive based on detected query language
+        lang_instruction = ""
+        if detected_lang == "mr":
+            lang_instruction = (
+                "\n\nCRITICAL LANGUAGE DIRECTIVE: The merchant is asking in Marathi (मराठी). "
+                "You MUST formulate your entire final response directly in natural, polite, grammatically correct Marathi (मराठी). "
+                "Do NOT respond in English or Hindi. Use standard Marathi banking terms: मुद्दल (Principal), दैनिक हप्ता / ईएमआय (Daily EMI), व्याजदर (Interest Rate), कालावधी (Tenure), रोख प्रवाह (Cashflow), बचत (Savings)."
+            )
+        elif detected_lang == "hi":
+            lang_instruction = (
+                "\n\nCRITICAL LANGUAGE DIRECTIVE: The merchant is asking in Hindi (हिंदी). "
+                "You MUST formulate your entire final response directly in natural, polite, grammatically correct Hindi (हिंदी). "
+                "Do NOT respond in English or Marathi. Use standard Hindi banking terms: मूलधन (Principal), दैनिक किस्त / ईएमआई (Daily EMI), ब्याज दर (Interest Rate), अवधि (Tenure), नकदी प्रवाह (Cashflow), बचत (Savings)."
+            )
+        else:
+            lang_instruction = (
+                "\n\nCRITICAL LANGUAGE DIRECTIVE: The merchant is asking in English. "
+                "You MUST formulate your entire response in clear, professional English. Do NOT respond in Hindi or Marathi."
+            )
 
         system_prompt = (
             f"You are the LoanIQ AI Financial Assistant for Indian small businesses. "
@@ -513,56 +814,28 @@ class AgentService:
             f"Active Loans: {opt['active_loans_count']}, Total Remaining Debt: ₹{opt['total_remaining_principal']:,.2f}, "
             f"Existing Daily EMI: ₹{opt['total_current_daily_emi']:.2f}. "
             f"30-day Avg Daily Net Cashflow: ₹{fc['avg_daily_net_cashflow']:.2f}. "
-            f"Bound all responses to LoanIQ's product rules, deterministic calculations, and bounded finance knowledge. "
+            f"Daily Cashflow Surplus above Existing EMI: ₹{daily_surplus:.2f}/day. "
+            f"Safe Additional Daily EMI Capacity: ₹{safe_additional_emi:.2f}/day. "
+            f"Bound all responses strictly to LoanIQ's product rules, deterministic calculations, and bounded finance knowledge. "
             f"NEVER claim guaranteed loan approval. Explain that acceptance probabilities are model estimates. "
-            f"If the user asks for a loan amount or EMI, extract the values and formulate a navigation action to 'recommendations'."
+            f"If the user asks for a loan amount or EMI, extract the values and call tool 'navigate_ui' to 'recommendations' with prefilled values. "
+            f"If the user asks to navigate (e.g. 'take me to forecast', 'take me to optimizer', 'take me to loans', 'take me to profile', 'take me to dashboard', or in Marathi 'मला अंदाज पृष्ठावर घेऊन जा', or in Hindi 'मुझे पूर्वानुमान पेज पर ले चलो'), call baseline MCP tool 'navigate_ui' with that page. "
+            f"If the merchant asks 'can I pay more emi for my current loan? how much?' or in Marathi 'मी माझ्या सध्याच्या कर्जासाठी अधिक ईएमआय भरू शकतो का? किती?' or in Hindi 'क्या मैं अपने मौजूदा लोन के लिए ज्यादा ईएमआई भर सकता हूँ? कितनी?': "
+            f"confirm that their 30-day projected net cashflow is ₹{fc['avg_daily_net_cashflow']:,.2f}/day and current total daily EMI is ₹{opt['total_current_daily_emi']:,.2f}/day. "
+            f"State clearly that they have an uncommitted daily surplus of ₹{daily_surplus:,.2f}/day and can safely afford up to ₹{safe_additional_emi:,.2f}/day in extra daily EMI to accelerate loan closure and save significant interest expense. "
+            f"{lang_instruction}"
         )
 
-        messages = [{"role": "system", "content": system_prompt}]
-        for h in history[-6:]:
-            messages.append({"role": h["role"], "content": h["content"]})
-        messages.append({"role": "user", "content": req.message})
+        page_ctx_dict = req.page_context.model_dump() if req.page_context else None
 
-        # Call OpenAI Chat Completion
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.2,
-            "max_tokens": 600
-        }
-
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                reply_text = data["choices"][0]["message"]["content"]
-
-                # Extract UI Action if user asked for recommendations or comparison
-                ui_action = None
-                extracted = {}
-                if intent == "LOAN_ACTION":
-                    amt, emi, ten = extract_numeric_loan_requirement(req.message)
-                    extracted = {"amount": amt or 100000.0, "emi": emi, "tenure": ten or 365}
-                    ui_action = UIAction(action_type="NAVIGATE", target_page="recommendations", parameters=extracted)
-                elif intent == "COMPARISON_EXPLANATION":
-                    ui_action = UIAction(action_type="NAVIGATE", target_page="compare", parameters={})
-
-                cls._save_turn(merchant_id, req.session_id or "default", history, req.message, reply_text)
-                return AgentChatResponse(
-                    reply_text=reply_text,
-                    workflow_type=intent,
-                    llm_used=True,
-                    ui_action=ui_action,
-                    extracted_data=extracted,
-                    suggested_prompts=["Compare these products", "Simulate this loan", "View cashflow forecast"]
-                )
-            else:
-                raise RuntimeError(f"OpenAI API error {resp.status_code}: {resp.text}")
+        response = OpenAIResponsesAdapter.execute_responses_workflow(
+            merchant_id=merchant_id,
+            user_message=reasoning_message,
+            system_prompt=system_prompt,
+            conversation_history=history,
+            page_context=page_ctx_dict
+        )
+        return response
 
     @classmethod
     def _save_turn(cls, merchant_id: str, session_id: str, history: List[Dict[str, str]], user_msg: str, assistant_msg: str):
