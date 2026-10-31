@@ -1,0 +1,75 @@
+LoanIQ Dataset Validation Report
+Generated during Phase 1 execution
+
+============================================================
+1. VALIDATING merchants.csv
+============================================================
+Row count: 4
+All expected columns present.
+Duplicate merchant_ids: 0
+Null values: {'merchant_id': 0, 'business_name': 0, 'merchant_type': 0, 'city': 0, 'city_tier': 0, 'business_age_months': 0, 'monthly_sales_reference': 0, 'monthly_profit_reference': 0, 'credit_score': 0, 'opening_cash_balance': 0, 'preferred_language': 0, 'existing_loan_count': 0, 'existing_daily_emi': 0, 'completed_loan_count': 0}
+Merchant IDs found: ['M001', 'M002', 'M003', 'M004']
+Languages: ['Marathi', 'Marathi', 'Marathi', 'Hindi']
+
+============================================================
+2. VALIDATING daily_sales.csv
+============================================================
+Total row count: 4140
+All expected columns present.
+Failed date parses: 0
+Overall Date Range: 2024-01-01 to 2026-10-31
+Max difference between (sales_inflow - total_expense) and net_cashflow: 0.0000
+Arithmetic integrity confirmed: net_cashflow = sales_inflow - total_expense (within rounding)
+Merchant M001: 1035 days (2024-01-01 to 2026-10-31), missing calendar days: 0, balance continuity max diff: 0.0000 (Day 1 vs opening bal 32000: diff=0.00)
+Merchant M002: 1035 days (2024-01-01 to 2026-10-31), missing calendar days: 0, balance continuity max diff: 0.0000 (Day 1 vs opening bal 27000: diff=0.00)
+Merchant M003: 1035 days (2024-01-01 to 2026-10-31), missing calendar days: 0, balance continuity max diff: 0.0000 (Day 1 vs opening bal 24000: diff=0.00)
+Merchant M004: 1035 days (2024-01-01 to 2026-10-31), missing calendar days: 0, balance continuity max diff: 0.0000 (Day 1 vs opening bal 29000: diff=0.00)
+
+============================================================
+3. VALIDATING loan_products.json
+============================================================
+Product count: 15
+Summary of Loan Products:
+ - LP001: Merchant Flex 01 by Demo Finance One | Rate: 14.0% | Range: ₹20,000 - ₹150,000 | Tenure: 180-540 days | Proc Fee: 1.0% | Prepay Fee: 0.0%
+ - LP002: Merchant Flex 02 by Uday Microcredit | Rate: 15.5% | Range: ₹25,000 - ₹175,000 | Tenure: 180-540 days | Proc Fee: 1.25% | Prepay Fee: 1.0%
+ - LP003: Merchant Flex 03 by Bharat Small Business Finance | Rate: 17.0% | Range: ₹30,000 - ₹200,000 | Tenure: 180-540 days | Proc Fee: 1.5% | Prepay Fee: 0.0%
+ - LP004: Merchant Flex 04 by Sahyog Capital | Rate: 18.5% | Range: ₹20,000 - ₹225,000 | Tenure: 180-540 days | Proc Fee: 1.0% | Prepay Fee: 1.0%
+ - LP005: Merchant Flex 05 by Pragati Lending | Rate: 20.0% | Range: ₹25,000 - ₹150,000 | Tenure: 180-540 days | Proc Fee: 1.25% | Prepay Fee: 0.0%
+ - LP006: Merchant Flex 06 by Demo Finance One | Rate: 21.5% | Range: ₹30,000 - ₹175,000 | Tenure: 180-540 days | Proc Fee: 1.5% | Prepay Fee: 1.0%
+ - LP007: Merchant Flex 07 by Uday Microcredit | Rate: 14.0% | Range: ₹20,000 - ₹200,000 | Tenure: 180-540 days | Proc Fee: 1.0% | Prepay Fee: 0.0%
+ - LP008: Merchant Flex 08 by Bharat Small Business Finance | Rate: 15.5% | Range: ₹25,000 - ₹225,000 | Tenure: 180-540 days | Proc Fee: 1.25% | Prepay Fee: 1.0%
+ - LP009: Merchant Flex 09 by Sahyog Capital | Rate: 17.0% | Range: ₹30,000 - ₹150,000 | Tenure: 180-540 days | Proc Fee: 1.5% | Prepay Fee: 0.0%
+ - LP010: Merchant Flex 10 by Pragati Lending | Rate: 18.5% | Range: ₹20,000 - ₹175,000 | Tenure: 180-540 days | Proc Fee: 1.0% | Prepay Fee: 1.0%
+ - LP011: Merchant Flex 11 by Demo Finance One | Rate: 20.0% | Range: ₹25,000 - ₹200,000 | Tenure: 180-540 days | Proc Fee: 1.25% | Prepay Fee: 0.0%
+ - LP012: Merchant Flex 12 by Uday Microcredit | Rate: 21.5% | Range: ₹30,000 - ₹225,000 | Tenure: 180-540 days | Proc Fee: 1.5% | Prepay Fee: 1.0%
+ - LP013: Merchant Flex 13 by Bharat Small Business Finance | Rate: 14.0% | Range: ₹20,000 - ₹150,000 | Tenure: 180-540 days | Proc Fee: 1.0% | Prepay Fee: 0.0%
+ - LP014: Merchant Flex 14 by Sahyog Capital | Rate: 15.5% | Range: ₹25,000 - ₹175,000 | Tenure: 180-540 days | Proc Fee: 1.25% | Prepay Fee: 1.0%
+ - LP015: Merchant Flex 15 by Pragati Lending | Rate: 17.0% | Range: ₹30,000 - ₹200,000 | Tenure: 180-540 days | Proc Fee: 1.5% | Prepay Fee: 0.0%
+
+============================================================
+4. VALIDATING loan_applications.csv
+============================================================
+Total row count: 1000
+All expected columns present.
+Date range: 2024-01-04 to 2026-10-31
+Target distribution (accepted): {0: 531, 1: 469}
+Unique applicants: 250 across 1000 applications
+Columns with null values: None
+
+============================================================
+5. VALIDATING pending & completed loan records
+============================================================
+Pending loans row count: 8
+Completed loans row count: 8
+
+Pending loans per merchant:
+ - M001: 2 active loans, remaining principal=₹86,019.63, total daily EMI=₹358.17
+ - M002: 2 active loans, remaining principal=₹92,034.51, total daily EMI=₹373.83
+ - M003: 2 active loans, remaining principal=₹97,351.82, total daily EMI=₹385.75
+ - M004: 2 active loans, remaining principal=₹103,710.98, total daily EMI=₹401.49
+
+Completed loans per merchant:
+ - M001: 2 completed loans, repaid principal=₹165,000.00
+ - M002: 2 completed loans, repaid principal=₹174,000.00
+ - M003: 2 completed loans, repaid principal=₹183,000.00
+ - M004: 2 completed loans, repaid principal=₹192,000.00

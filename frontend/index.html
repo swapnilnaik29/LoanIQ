@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoanIQ - AI-Powered Credit & Cash-Flow Advisory</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <!-- Local Bundled Chart.js for Zero-Dependency Fast Rendering -->
+  <script src="/js/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- Global Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <span class="brand-logo">LoanIQ</span>
+      <span class="brand-title">Credit Advisory</span>
+      <span class="brand-badge" data-i18n="demo_badge">Demo MVP</span>
+    </div>
+
+    <div class="header-controls">
+      <div style="font-size:0.85rem; display:flex; align-items:center; gap:0.4rem;">
+        <span id="merchant-name-display" style="font-weight:600;">Merchant</span>
+        <span id="merchant-id-badge" class="badge badge-blue">M001</span>
+      </div>
+
+      <!-- Language Selector -->
+      <div class="lang-selector">
+        🌐 <select id="lang-select">
+          <option value="en">English</option>
+          <option value="hi">हिन्दी (Hindi)</option>
+          <option value="mr">मराठी (Marathi)</option>
+        </select>
+      </div>
+
+      <button id="status-btn" class="status-btn" title="Inspect Models & Integrations" data-i18n="system_status">
+        ⚙️ Status
+      </button>
+
+      <button id="logout-btn" class="logout-btn" data-i18n="sign_out">
+        Sign Out
+      </button>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <nav class="app-sidebar">
+      <a class="nav-link active" data-page="dashboard">
+        <span class="icon">📊</span>
+        <span class="nav-text" data-i18n="nav_dashboard">Dashboard</span>
+      </a>
+      <a class="nav-link" data-page="recommendations">
+        <span class="icon">🏷️</span>
+        <span class="nav-text" data-i18n="nav_recommendations">Loan Offers</span>
+      </a>
+      <a class="nav-link" data-page="compare">
+        <span class="icon">⚖️</span>
+        <span class="nav-text" data-i18n="nav_compare">Compare Loans</span>
+      </a>
+      <a class="nav-link" data-page="forecast">
+        <span class="icon">📈</span>
+        <span class="nav-text" data-i18n="nav_forecast">Cash-Flow Forecast</span>
+      </a>
+      <a class="nav-link" data-page="optimizer">
+        <span class="icon">💡</span>
+        <span class="nav-text" data-i18n="nav_optimizer">Loan Optimizer</span>
+      </a>
+      <a class="nav-link" data-page="profile">
+        <span class="icon">🏪</span>
+        <span class="nav-text" data-i18n="nav_profile">Profile & History</span>
+      </a>
+      <a class="nav-link" data-page="assistant" id="sidebar-assistant-link" style="color:var(--primary-blue); font-weight:600;">
+        <span class="icon">🤖</span>
+        <span class="nav-text">AI Copilot</span>
+      </a>
+    </nav>
+
+    <!-- Main Content Sections -->
+    <main class="main-content">
+
+      <!-- Disclaimer Banner -->
+      <div class="disclaimer-banner">
+        ⚠️ <strong>Notice:</strong> LoanIQ is a prototype application utilizing synthetic demonstration datasets. Calculations and probabilities do not represent real lender commitments, credit bureau reports, or guaranteed disbursements.
+      </div>
+
+      <!-- SECTION 1: DASHBOARD -->
+      <section id="section-dashboard" class="page-section active">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title" data-i18n="dash_welcome">Merchant Financial Snapshot</h1>
+            <p class="section-subtitle" data-i18n="dash_subtitle">Real-time working capital, active borrowing, and credit intelligence.</p>
+          </div>
+        </div>
+
+        <div id="dash-warnings-container" style="display:none;"></div>
+
+        <!-- 4 Metric Cards -->
+        <div class="cards-grid-4">
+          <div class="card">
+            <div class="stat-label" data-i18n="dash_sales_label">Monthly Reference Sales</div>
+            <div class="stat-value" id="dash-sales">₹0.00</div>
+            <div class="stat-subtext" id="dash-city-tier">Tier 1 City</div>
+          </div>
+          <div class="card">
+            <div class="stat-label" data-i18n="dash_profit_label">Monthly Profit Reference</div>
+            <div class="stat-value" id="dash-profit">₹0.00</div>
+            <div class="stat-subtext" id="dash-type">Retail Grocery</div>
+          </div>
+          <div class="card">
+            <div class="stat-label" data-i18n="dash_score_label">Credit Score (Demo)</div>
+            <div class="stat-value" id="dash-score">0</div>
+            <div class="stat-subtext"><span class="badge badge-green">Good Rating</span></div>
+          </div>
+          <div class="card">
+            <div class="stat-label" data-i18n="dash_daily_emi_label">Current Daily EMI</div>
+            <div class="stat-value" id="dash-daily-emi">₹0.00</div>
+            <div class="stat-subtext"><span id="dash-active-count">0</span> Active Loans</div>
+          </div>
+        </div>
+
+        <!-- 2 Column Section: Top Recommendations & Forecast Preview -->
+        <div class="cards-grid-2">
+          <!-- Top Loan Recommendations Preview -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title" data-i18n="dash_top_offers_title">Top Eligible Loan Offers</span>
+              <button class="btn btn-outline btn-sm" onclick="window.switchPage('recommendations')" data-i18n="view_all_offers">View All Offers →</button>
+            </div>
+            <div id="dash-top-recs">
+              <p class="stat-subtext">Loading eligible offers...</p>
+            </div>
+          </div>
+
+          <!-- Forecast Preview -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title" data-i18n="dash_fc_preview_title">30-Day Cash-Flow Forecast</span>
+              <button class="btn btn-outline btn-sm" onclick="window.switchPage('forecast')" data-i18n="view_analytics">Full Analytics →</button>
+            </div>
+            <div class="cards-grid-2" style="margin-bottom:0.75rem;">
+              <div style="background:#f8fafc; padding:0.75rem; border-radius:var(--radius-sm);">
+                <div class="stat-label">Projected Sales Inflow</div>
+                <div class="stat-value" style="font-size:1.25rem; color:var(--accent-green);" id="dash-fc-inflow">₹0.00</div>
+              </div>
+              <div style="background:#f8fafc; padding:0.75rem; border-radius:var(--radius-sm);">
+                <div class="stat-label">Projected Expenses</div>
+                <div class="stat-value" style="font-size:1.25rem; color:var(--accent-amber);" id="dash-fc-expense">₹0.00</div>
+              </div>
+              <div style="background:#f8fafc; padding:0.75rem; border-radius:var(--radius-sm);">
+                <div class="stat-label">Net Operating Flow</div>
+                <div class="stat-value" style="font-size:1.25rem; color:#00BAF2;" id="dash-fc-net">₹0.00</div>
+              </div>
+              <div style="background:#f8fafc; padding:0.75rem; border-radius:var(--radius-sm);">
+                <div class="stat-label">Avg Daily Surplus</div>
+                <div class="stat-value" style="font-size:1.25rem; color:var(--dark-navy);" id="dash-fc-avg-daily">₹0.00</div>
+              </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.5rem;">
+              <span id="dash-fc-status-badge" class="badge badge-green">Healthy Cashflow</span>
+              <span style="font-size:0.75rem; color:var(--text-secondary);">Direct Supervised ML Forecast</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Obligations Summary -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title" data-i18n="dash_active_debt_title">Active Debt & Repayment Summary</span>
+            <button class="btn btn-outline btn-sm" onclick="window.switchPage('optimizer')" data-i18n="optimize_loans_action">Optimize Loans →</button>
+          </div>
+          <div style="display:flex; gap:2rem; flex-wrap:wrap;">
+            <div>
+              <div class="stat-label">Total Outstanding Principal</div>
+              <div class="stat-value" style="font-size:1.35rem;" id="dash-debt-total">₹0.00</div>
+            </div>
+            <div>
+              <div class="stat-label">Cumulative Repaid Principal</div>
+              <div class="stat-value" style="font-size:1.35rem; color:var(--accent-green);" id="dash-repaid-total">₹0.00</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 2: RECOMMENDATIONS -->
+      <section id="section-recommendations" class="page-section">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title" data-i18n="recs_title">Personalized Loan Recommendations</h1>
+            <p class="section-subtitle" data-i18n="recs_subtitle">Ranked using calibrated historical acceptance probability, rate terms, and cashflow affordability.</p>
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            <button id="compare-selected-btn" class="btn btn-navy" disabled>
+              Compare Selected (<span id="selected-compare-count">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label data-i18n="filter_amount">Requested Amount (₹)</label>
+            <input type="number" id="rec-amount-input" value="100000" step="5000" min="20000" max="225000">
+          </div>
+          <div class="filter-group">
+            <label data-i18n="filter_tenure">Tenure (Days)</label>
+            <select id="rec-tenure-input">
+              <option value="180">180 Days (6 Months)</option>
+              <option value="270">270 Days (9 Months)</option>
+              <option value="365" selected>365 Days (1 Year)</option>
+              <option value="540">540 Days (18 Months)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label data-i18n="filter_emi">Max Daily EMI (Optional)</label>
+            <input type="number" id="rec-emi-input" placeholder="e.g. 500" step="50">
+          </div>
+          <div class="filter-group" style="justify-content:flex-end;">
+            <button id="apply-rec-filter-btn" class="btn btn-primary" style="height:38px;">Apply Filters</button>
+          </div>
+          <div class="filter-group" style="flex-direction:row; align-items:center; gap:0.5rem; margin-left:auto;">
+            <input type="checkbox" id="show-ineligible-toggle" style="cursor:pointer;">
+            <label for="show-ineligible-toggle" style="margin:0; cursor:pointer;" data-i18n="show_ineligible">Show Ineligible Products</label>
+          </div>
+        </div>
+
+        <!-- Recommendations Container -->
+        <div id="recommendations-list">
+          <div class="card"><p class="stat-subtext">Loading loan offers...</p></div>
+        </div>
+      </section>
+
+      <!-- SECTION 3: COMPARE LOANS -->
+      <section id="section-compare" class="page-section">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title" data-i18n="compare_title">Loan Product Comparison</h1>
+            <p class="section-subtitle" data-i18n="compare_subtitle">Side-by-side analysis of interest rates, daily EMI, processing fees, and acceptance likelihood.</p>
+          </div>
+          <button class="btn btn-outline" onclick="window.switchPage('recommendations')">← Back to Offers</button>
+        </div>
+
+        <!-- Comparison Highlights Bar -->
+        <div class="cards-grid-4" style="margin-bottom:1.5rem;">
+          <div class="card" style="border-top:3px solid var(--accent-green);">
+            <div class="stat-label">Best Overall Fit</div>
+            <div class="stat-value" style="font-size:1.25rem;" id="best-overall-badge">-</div>
+            <div class="stat-subtext">Multi-factor balance</div>
+          </div>
+          <div class="card" style="border-top:3px solid var(--primary-blue);">
+            <div class="stat-label">Lowest Interest APR</div>
+            <div class="stat-value" style="font-size:1.25rem;" id="lowest-interest-badge">-</div>
+            <div class="stat-subtext">Minimizes finance charge</div>
+          </div>
+          <div class="card" style="border-top:3px solid #6366f1;">
+            <div class="stat-label">Highest Likelihood</div>
+            <div class="stat-value" style="font-size:1.25rem;" id="highest-prob-badge">-</div>
+            <div class="stat-subtext">Calibrated model estimate</div>
+          </div>
+          <div class="card" style="border-top:3px solid var(--dark-navy);">
+            <div class="stat-label">Repayment Convention</div>
+            <div class="stat-value" style="font-size:1.15rem;">Daily Reducing</div>
+            <div class="stat-subtext">Standard commercial terms</div>
+          </div>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="card">
+          <div id="comparison-table-container" class="table-responsive">
+            <p class="stat-subtext">Select products to compare.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 4: FORECAST ANALYTICS -->
+      <section id="section-forecast" class="page-section">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title" data-i18n="fc_title">Cash-Flow Forecasting Analytics</h1>
+            <p class="section-subtitle" data-i18n="fc_subtitle">Machine-learning projection of sales inflow, expenses, and net daily cash surplus.</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <!-- Horizon Selector -->
+            <div class="horizon-btn-group">
+              <button class="horizon-btn" data-horizon="3">3 Days</button>
+              <button class="horizon-btn" data-horizon="7">7 Days</button>
+              <button class="horizon-btn" data-horizon="15">15 Days</button>
+              <button class="horizon-btn active" data-horizon="30">30 Days</button>
+            </div>
+            <button id="refresh-forecast-btn" class="btn btn-outline btn-sm">🔄 Refresh Forecast</button>
+          </div>
+        </div>
+
+        <!-- Liquidity Alert Box -->
+        <div id="fc-liquidity-alert" style="display:none;"></div>
+
+        <!-- Summary Metrics -->
+        <div class="cards-grid-4">
+          <div class="card">
+            <div class="stat-label">Projected Sales Inflow</div>
+            <div class="stat-value" style="color:var(--accent-green);" id="fc-sum-inflow">₹0.00</div>
+            <div class="stat-subtext">Total expected receipts</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Projected Expenses</div>
+            <div class="stat-value" style="color:var(--accent-amber);" id="fc-sum-expense">₹0.00</div>
+            <div class="stat-subtext">Total expected outflow</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Net Operating Flow</div>
+            <div class="stat-value" style="color:var(--primary-blue);" id="fc-sum-net">₹0.00</div>
+            <div class="stat-subtext">Inflow minus expenses</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Avg Daily Net Surplus</div>
+            <div class="stat-value" style="color:var(--dark-navy);" id="fc-avg-daily-net">₹0.00</div>
+            <div class="stat-subtext">Daily debt-servicing capacity</div>
+          </div>
+        </div>
+
+        <!-- Chart Card -->
+        <div class="card" style="margin-bottom:1.5rem;">
+          <div class="card-header">
+            <div>
+              <span class="card-title">📈 Daily Cashflow Trajectory</span>
+              <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.25rem;">
+                Comparing Sales Inflow, Business Expenses, and Net Daily Profit over time.
+              </div>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">
+              Generated: <span id="fc-timestamp">-</span>
+            </div>
+          </div>
+          <div style="position:relative; height:380px; width:100%;">
+            <canvas id="forecastChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Daily Forecast Breakdown Table -->
+        <div id="forecast-daily-table-container"></div>
+      </section>
+
+      <!-- SECTION 5: LOAN OPTIMIZER & SIMULATOR WITH SLIDERS & RED MARKER -->
+      <section id="section-optimizer" class="page-section">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title" data-i18n="opt_title">Loan Optimizer & Simulator</h1>
+            <p class="section-subtitle" data-i18n="opt_subtitle">Optimize existing active debt at locked contractual interest rates, or simulate additional new loans against forecast cashflow.</p>
+          </div>
+        </div>
+
+        <!-- Summary Grid -->
+        <div class="cards-grid-4">
+          <div class="card">
+            <div class="stat-label">Total Active Debt</div>
+            <div class="stat-value" id="opt-tot-debt">₹0.00</div>
+            <div class="stat-subtext">Principal outstanding</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Current Daily EMI</div>
+            <div class="stat-value" id="opt-daily-emi">₹0.00</div>
+            <div class="stat-subtext">Total active payments</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Avg Daily Net Flow</div>
+            <div class="stat-value" id="opt-cashflow-avg">₹0.00</div>
+            <div class="stat-subtext">Forecast cash generation</div>
+          </div>
+          <div class="card">
+            <div class="stat-label">Cash Buffer After EMI</div>
+            <div class="stat-value" style="color:var(--accent-green);" id="opt-free-cash">₹0.00</div>
+            <div class="stat-subtext">Available daily surplus</div>
+          </div>
+        </div>
+
+        <!-- Sub-Tab Navigation for Existing vs New Loan -->
+        <div class="sub-tab-nav">
+          <button class="sub-tab-btn active" id="btn-subtab-old-loan" onclick="window.switchOptimizerTab('old')">
+            🔄 Optimize Existing Active Loans (Fixed APR)
+          </button>
+          <button class="sub-tab-btn" id="btn-subtab-new-loan" onclick="window.switchOptimizerTab('new')">
+            ➕ Simulate Additional New Loan
+          </button>
+        </div>
+
+        <!-- Consolidation Recommendation Box -->
+        <div class="card" style="margin-bottom:1.5rem; background:#f0f9ff; border-left:4px solid var(--primary-blue);">
+          <div style="font-weight:700; color:var(--dark-navy); margin-bottom:0.25rem;">💡 Debt Optimization & Consolidation Strategy</div>
+          <p id="opt-consolidation-recom" style="font-size:0.9rem; color:#1e293b;"></p>
+        </div>
+
+        <!-- SUBTAB 1: OPTIMIZE EXISTING ACTIVE LOANS -->
+        <div id="subtab-old-loan" class="optimizer-subtab-content">
+          <div class="cards-grid-2">
+            <!-- Left Card: Existing Active Loan Schedule & Capacity Meter -->
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Existing Active Loan Schedule</span>
+                <span class="stat-subtext">Verified lender accounts</span>
+              </div>
+              <div id="active-loans-table-container" class="table-responsive">
+                <p class="stat-subtext">Loading active loans...</p>
+              </div>
+
+              <!-- Loan Selector for Optimization -->
+              <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid #f1f5f9;">
+                <label style="font-size:0.85rem; font-weight:700; color:var(--dark-navy); display:block; margin-bottom:0.4rem;">
+                  Select Active Loan or Portfolio to Optimize:
+                </label>
+                <select id="old-loan-select" class="form-input" style="width:100%; font-weight:600; padding:0.6rem 0.85rem; border:1px solid #cbd5e1; border-radius:var(--radius-sm);">
+                  <option value="all">Combined Active Debt Portfolio</option>
+                </select>
+              </div>
+
+              <!-- Visual Capacity Meter -->
+              <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid #f1f5f9;">
+                <div style="font-size:0.85rem; font-weight:700; color:var(--dark-navy);">Daily Cashflow Capacity vs Total Debt Commitments</div>
+                <div id="affordability-gauge-bar" style="margin-top:0.5rem;"></div>
+              </div>
+            </div>
+
+            <!-- Right Card: Existing Debt Repayment Optimizer -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <span class="card-title">Existing Debt Repayment Optimizer</span>
+                  <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.2rem;">
+                    Contractual interest rate cannot be changed. Optimize repayment pace by adjusting Daily EMI or Tenure on remaining principal.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fixed Contractual Terms (Locked) -->
+              <div class="locked-card" style="margin-bottom:1.25rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                  <strong style="color:var(--dark-navy); font-size:0.9rem;" id="old-disp-account-title">Selected: Combined Debt Portfolio</strong>
+                  <span class="locked-badge">🔒 Contractual APR Fixed</span>
+                </div>
+                <div class="cards-grid-4" style="gap:0.5rem; text-align:center;">
+                  <div style="background:#ffffff; padding:0.5rem; border-radius:var(--radius-sm); border:1px solid #e2e8f0;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">REMAINING DEBT</div>
+                    <div style="font-weight:700; color:var(--dark-navy); font-size:0.95rem;" id="old-disp-principal">₹0.00</div>
+                  </div>
+                  <div style="background:#ffffff; padding:0.5rem; border-radius:var(--radius-sm); border:1px solid #e2e8f0;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">CONTRACT APR</div>
+                    <div style="font-weight:700; color:#0284c7; font-size:0.95rem;" id="old-disp-apr">0.0% APR</div>
+                  </div>
+                  <div style="background:#ffffff; padding:0.5rem; border-radius:var(--radius-sm); border:1px solid #e2e8f0;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">CURRENT EMI</div>
+                    <div style="font-weight:700; color:#002970; font-size:0.95rem;" id="old-disp-curr-emi">₹0.00/day</div>
+                  </div>
+                  <div style="background:#ffffff; padding:0.5rem; border-radius:var(--radius-sm); border:1px solid #e2e8f0;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">CONTRACT TENURE</div>
+                    <div style="font-weight:700; color:#002970; font-size:0.95rem;" id="old-disp-curr-tenure">0 Days</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slider 1: Adjusted Daily EMI for Old Loan with Red Marker -->
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>Adjusted Daily EMI Repayment</span>
+                  <span id="badge-old-emi" class="slider-value-badge">₹0.00/day</span>
+                </div>
+                <input type="range" id="slider-old-emi" class="range-slider" min="50" max="1500" step="5" value="358">
+                <div class="slider-threshold-marker">
+                  <span>Min Interest Cover</span>
+                  <span id="old-emi-threshold-reference" style="font-weight:600; color:#0369a1;">Forecast Cashflow Limit</span>
+                  <span>Max ₹1,500/day</span>
+                </div>
+                <!-- Dynamic Red Marker Indicator for Old Loan -->
+                <div id="old-emi-red-marker-flag" class="green-marker-flag" style="margin-top:0.4rem;">
+                  ✅ <strong>SAFE ZONE:</strong> Payment covered by projected cashflow.
+                </div>
+              </div>
+
+              <!-- Slider 2: Adjusted Remaining Tenure for Old Loan -->
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>Adjusted Payoff Tenure (Days)</span>
+                  <span id="badge-old-tenure" class="slider-value-badge">268 Days</span>
+                </div>
+                <input type="range" id="slider-old-tenure" class="range-slider" min="30" max="540" step="5" value="268">
+                <div class="slider-threshold-marker">
+                  <span>30 Days (Fast Payoff)</span>
+                  <span>180 Days (6 Mos)</span>
+                  <span>365 Days (1 Year)</span>
+                  <span>540 Days</span>
+                </div>
+              </div>
+
+              <!-- Real-time Optimization Impact Box -->
+              <div id="old-loan-impact-box" class="card" style="background:#f8fafc; border-left:4px solid var(--primary-blue); margin-top:1rem; padding:1rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                  <strong style="color:var(--dark-navy);">⚡ Payoff & Interest Optimization Impact:</strong>
+                  <span id="old-impact-interest-badge" class="badge badge-green">Baseline Terms</span>
+                </div>
+                <div class="cards-grid-4" style="gap:0.5rem; text-align:center; margin-bottom:0.75rem;">
+                  <div style="background:#ffffff; padding:0.5rem; border-radius:var(--radius-sm); border:1px solid #e2e8f0;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">PAYOFF SPEED</div>
+                    <div style="font-weight:700; color:var(--dark-navy);" id="old-impact-speed">-</div>
+                  </div>
+                  <div style="background:#ffffff; padding:0.5rem; border-radius:var(--radius-sm); border:1px solid #e2e8f0;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">INTEREST IMPACT</div>
+                    <div style="font-weight:700;" id="old-impact-interest-diff">₹0.00</div>
+                  </div>
+                  <div style="background:#ffffff; padding:0.5rem; border-radius:var(--radius-sm); border:1px solid #e2e8f0;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">TOTAL REPAYMENT</div>
+                    <div style="font-weight:700; color:var(--dark-navy);" id="old-impact-total-repay">₹0.00</div>
+                  </div>
+                  <div style="background:#ffffff; padding:0.5rem; border-radius:var(--radius-sm); border:1px solid #e2e8f0;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">DAILY BUFFER</div>
+                    <div style="font-weight:700; color:var(--accent-green);" id="old-impact-buffer">₹0.00/day</div>
+                  </div>
+                </div>
+                <p id="old-impact-strategy-text" style="font-size:0.85rem; color:#334155; margin:0; line-height:1.4;"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: SIMULATE ADDITIONAL NEW LOAN -->
+        <div id="subtab-new-loan" class="optimizer-subtab-content" style="display:none;">
+          <div class="cards-grid-2">
+            <!-- Left Card: Debt Stacking Analysis -->
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">New Loan Capacity Analysis</span>
+                <span class="stat-subtext">Stacked debt evaluation</span>
+              </div>
+              <p style="font-size:0.875rem; color:var(--text-secondary); margin-bottom:1rem;">
+                When taking an additional loan, your new daily payment is stacked on top of existing active debt. Evaluate whether your forecast daily cashflow can safely sustain both obligations.
+              </p>
+
+              <div class="card" style="background:#f8fafc; padding:1rem; margin-bottom:1rem; border:1px solid #e2e8f0;">
+                <div style="font-size:0.85rem; font-weight:700; color:var(--dark-navy); margin-bottom:0.5rem;">Daily Debt Commitment Breakdown</div>
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.35rem;">
+                  <span>Existing Active Loans Daily EMI:</span>
+                  <strong id="new-disp-existing-emi">₹358.17/day</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.35rem;">
+                  <span>Simulated New Loan Daily EMI:</span>
+                  <strong id="new-disp-simulated-emi" style="color:var(--primary-blue);">₹0.00/day</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:0.9rem; font-weight:700; border-top:1px dashed #cbd5e1; padding-top:0.4rem; margin-top:0.4rem;">
+                  <span>Total Combined Daily Payment:</span>
+                  <span id="new-disp-total-commitment" style="color:var(--dark-navy);">₹0.00/day</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#0284c7; margin-top:0.25rem;">
+                  <span>Forecast Daily Net Cashflow:</span>
+                  <strong id="new-disp-forecast-limit">₹599.75/day</strong>
+                </div>
+              </div>
+
+              <!-- Visual Capacity Meter for New Loan -->
+              <div id="new-loan-gauge-bar"></div>
+            </div>
+
+            <!-- Right Card: New Loan Simulator Sliders -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <span class="card-title">New Loan Parameters (Simulator)</span>
+                  <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:0.2rem;">
+                    Adjust principal amount, tenure, daily EMI, and market rate for a prospective new loan.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slider 1: Loan Amount Slider -->
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>Sanctioned Principal Amount</span>
+                  <span id="badge-amount" class="slider-value-badge">₹75,000</span>
+                </div>
+                <input type="range" id="slider-amount" class="range-slider" min="10000" max="250000" step="5000" value="75000">
+                <div class="slider-threshold-marker">
+                  <span>₹10,000</span>
+                  <span>₹1,25,000</span>
+                  <span>₹2,50,000</span>
+                </div>
+              </div>
+
+              <!-- Slider 2: Tenure Slider -->
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>Loan Tenure (Days)</span>
+                  <span id="badge-tenure" class="slider-value-badge">180 Days</span>
+                </div>
+                <input type="range" id="slider-tenure" class="range-slider" min="30" max="540" step="15" value="180">
+                <div class="slider-threshold-marker">
+                  <span>30 Days (1 Month)</span>
+                  <span>365 Days (1 Year)</span>
+                  <span>540 Days (18 Mos)</span>
+                </div>
+              </div>
+
+              <!-- Slider 3: Daily EMI with Red Marker -->
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>Daily EMI Repayment</span>
+                  <span id="badge-emi" class="slider-value-badge">₹468/day</span>
+                </div>
+                <input type="range" id="slider-emi" class="range-slider" min="50" max="2500" step="10" value="468">
+                <div class="slider-threshold-marker">
+                  <span>Min ₹50/day</span>
+                  <span id="emi-threshold-reference" style="font-weight:600; color:#0369a1;">Forecast Net Cap</span>
+                  <span>Max ₹2,500/day</span>
+                </div>
+                <!-- Prominent Red Marker Alert Flag -->
+                <div id="emi-red-marker-flag" class="green-marker-flag" style="margin-top:0.4rem;">
+                  ✅ <strong>SAFE ZONE:</strong> Daily payment is within your projected cashflow capacity.
+                </div>
+              </div>
+
+              <!-- Slider 4: Interest Rate -->
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>Annual Interest Rate (APR)</span>
+                  <span id="badge-rate" class="slider-value-badge">15.0% APR</span>
+                </div>
+                <input type="range" id="slider-rate" class="range-slider" min="10.0" max="24.0" step="0.5" value="15.0">
+                <div class="slider-threshold-marker">
+                  <span>10.0% APR</span>
+                  <span>16.0% APR</span>
+                  <span>24.0% APR</span>
+                </div>
+              </div>
+
+              <!-- Simulation Output -->
+              <div id="sim-result-container" style="display:none; margin-top:1rem; padding-top:1rem; border-top:1px solid #f1f5f9;">
+                <div id="sim-status-banner"></div>
+                <div class="rec-metrics-grid" style="margin-bottom:0.75rem;">
+                  <div class="rec-metric-item">
+                    <span class="rec-metric-label">Simulated EMI</span>
+                    <span class="rec-metric-val" id="sim-out-emi">₹0.00</span>
+                  </div>
+                  <div class="rec-metric-item">
+                    <span class="rec-metric-label">Total Interest</span>
+                    <span class="rec-metric-val" id="sim-out-interest">₹0.00</span>
+                  </div>
+                  <div class="rec-metric-item">
+                    <span class="rec-metric-label">Processing Fee (1%)</span>
+                    <span class="rec-metric-val" id="sim-out-fee">₹0.00</span>
+                  </div>
+                  <div class="rec-metric-item">
+                    <span class="rec-metric-label">Total Cost</span>
+                    <span class="rec-metric-val" id="sim-out-cost">₹0.00</span>
+                  </div>
+                  <div class="rec-metric-item">
+                    <span class="rec-metric-label">Total Repayment</span>
+                    <span class="rec-metric-val" id="sim-out-repay">₹0.00</span>
+                  </div>
+                </div>
+
+                <!-- Alternative scenarios -->
+                <div style="font-size:0.8rem; font-weight:700; color:var(--dark-navy); margin-top:0.75rem;">Suggested Alternatives:</div>
+                <div id="sim-alternatives-container"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 6: MERCHANT PROFILE & HISTORY -->
+      <section id="section-profile" class="page-section">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title" data-i18n="profile_title">Merchant Profile & Loan History</h1>
+            <p class="section-subtitle" data-i18n="profile_subtitle">Verified demo business profile and historical loan accounts.</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem;">
+          <div class="card-header">
+            <span class="card-title">Business Profile</span>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem;">
+            <div>
+              <div class="stat-label">Business Name</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-biz-name">-</div>
+            </div>
+            <div>
+              <div class="stat-label">Merchant ID</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-id">-</div>
+            </div>
+            <div>
+              <div class="stat-label">Business Type</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-type">-</div>
+            </div>
+            <div>
+              <div class="stat-label">City & Tier</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-city">-</div>
+            </div>
+            <div>
+              <div class="stat-label">Business Age</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-age">-</div>
+            </div>
+            <div>
+              <div class="stat-label">Monthly Sales Reference</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-sales">-</div>
+            </div>
+            <div>
+              <div class="stat-label">Monthly Profit Reference</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-profit">-</div>
+            </div>
+            <div>
+              <div class="stat-label">Credit Score</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-score">-</div>
+            </div>
+            <div>
+              <div class="stat-label">Opening Cash Balance</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-opening-bal">-</div>
+            </div>
+            <div>
+              <div class="stat-label">Preferred Language</div>
+              <div class="stat-value" style="font-size:1.15rem;" id="prof-lang">-</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Completed Loans History -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Historical Completed Loans</span>
+          </div>
+          <div id="completed-loans-container" class="table-responsive">
+            <p class="stat-subtext">Loading completed loan history...</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- FLOATING AI COPILOT BUTTON (BOTTOM-LEFT CORNER) -->
+  <button id="floating-assistant-btn" class="floating-assistant-btn" title="Open AI Assistant">
+    <span class="avatar">🤖</span>
+    <span>AI Copilot</span>
+    <span class="pulse-indicator"></span>
+  </button>
+
+  <!-- FLOATING AI COPILOT WINDOW (BOTTOM-LEFT CORNER) -->
+  <div id="floating-chat-window" class="floating-chat-window">
+    <div class="floating-chat-header">
+      <div class="title-area">
+        <span style="font-size:1.35rem;">🤖</span>
+        <div>
+          <div style="font-weight:700; font-size:0.95rem;">LoanIQ AI Copilot</div>
+          <div style="font-size:0.7rem; color:#bae6fd; display:flex; align-items:center; gap:0.35rem;">
+            <span style="width:6px; height:6px; background:#10b981; border-radius:50%; display:inline-block;"></span>
+            <span>Online • Persistent Floating Assistant</span>
+          </div>
+        </div>
+      </div>
+      <div class="window-controls">
+        <button id="minimize-chat-window-btn" title="Minimize">—</button>
+        <button id="close-chat-window-btn" title="Close">&times;</button>
+      </div>
+    </div>
+
+    <!-- Messages Container -->
+    <div id="chat-messages-container" class="chat-messages">
+      <div class="chat-msg assistant">
+        Hello! I am your <strong>LoanIQ Credit Copilot</strong>.
+        <br><br>
+        I stay with you as you navigate pages. Ask me anything, or tell me your borrowing requirement:
+        <br>
+        • <em>"I need a ₹1 lakh loan with ₹500 daily EMI"</em>
+        <br>
+        • <em>"Compare the top 3 loans on screen"</em>
+        <br>
+        • <em>"What is daily reducing balance EMI?"</em>
+      </div>
+    </div>
+
+    <!-- Quick Prompts Pills -->
+    <div class="chat-prompts-bar">
+      <span class="prompt-pill" data-prompt="I need a ₹1 lakh loan and can afford ₹500 daily EMI">💰 Need ₹1 Lakh</span>
+      <span class="prompt-pill" data-prompt="Compare top 3 loans for me">⚖️ Compare Top Loans</span>
+      <span class="prompt-pill" data-prompt="What is daily EMI and how does reducing balance work?">❓ What is Daily EMI?</span>
+      <span class="prompt-pill" data-prompt="Take me to cashflow forecast analytics">📈 Open Forecast</span>
+    </div>
+
+    <!-- Chat Input Bar -->
+    <div class="chat-input-bar">
+      <input type="text" id="chat-input" placeholder="Ask about loans or state amount/EMI...">
+      <button id="chat-mic-btn" class="voice-btn" title="Voice Input (STT)">🎙️</button>
+      <button id="chat-send-btn" class="btn btn-primary" style="padding:0.5rem 0.85rem;">Send</button>
+    </div>
+  </div>
+
+  <!-- System Status Modal -->
+  <div id="status-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="color:var(--dark-navy);">System Status & ML Model Metadata</h3>
+        <button id="close-modal-btn" class="close-modal-btn">&times;</button>
+      </div>
+      <div id="status-modal-body">
+        Loading...
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Bootstrap -->
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+{
+  "generated_at": "2026-10-31T11:53:08.308031",
+  "training_duration_seconds": 12.928999,
+  "cashflow_forecaster": {
+    "model_type": "HistGradientBoostingRegressor (Pooled horizon-aware direct multi-horizon)",
+    "train_samples": 53040,
+    "validation_samples": 5640,
+    "validation_split_date": "2026-07-01",
+    "inflow_mae": 354.9272243298179,
+    "inflow_rmse": 455.9838382573233,
+    "expense_mae": 246.06141562798732,
+    "expense_rmse": 320.9187954034662,
+    "baseline_comparison": {
+      "inflow_seasonal_naive_mae": 579.6735957446808,
+      "inflow_seasonal_naive_rmse": 754.1115763431508,
+      "expense_seasonal_naive_mae": 399.0593510638298,
+      "expense_seasonal_naive_rmse": 524.3684876072664
+    },
+    "metrics_by_horizon": {
+      "1-3": {
+        "inflow_mae": 350.49132786244974,
+        "inflow_rmse": 452.4311865271151,
+        "exp_mae": 254.94259124102854,
+        "exp_rmse": 343.60887300401475
+      },
+      "4-7": {
+        "inflow_mae": 359.2560790294394,
+        "inflow_rmse": 467.05624669261624,
+        "exp_mae": 253.67767824940753,
+        "exp_rmse": 337.3614010829156
+      },
+      "8-15": {
+        "inflow_mae": 358.28577214679615,
+        "inflow_rmse": 458.78046200341504,
+        "exp_mae": 249.2520225317114,
+        "exp_rmse": 325.6315310819881
+      },
+      "16-30": {
+        "inflow_mae": 352.8688168676708,
+        "inflow_rmse": 452.19123079382484,
+        "exp_mae": 240.55252012434747,
+        "exp_rmse": 308.9689318183062
+      }
+    },
+    "feature_list": [
+      "merchant_id",
+      "horizon",
+      "target_dayofweek",
+      "target_day",
+      "target_month",
+      "target_is_weekend",
+      "inflow_lag1",
+      "inflow_lag2",
+      "inflow_lag3",
+      "inflow_lag7",
+      "inflow_lag14",
+      "inflow_lag28",
+      "inflow_roll7_mean",
+      "inflow_roll7_std",
+      "inflow_roll14_mean",
+      "inflow_roll14_std",
+      "inflow_roll28_mean",
+      "inflow_roll28_std",
+      "exp_lag1",
+      "exp_lag2",
+      "exp_lag3",
+      "exp_lag7",
+      "exp_lag14",
+      "exp_lag28",
+      "exp_roll7_mean",
+      "exp_roll7_std",
+      "exp_roll14_mean",
+      "exp_roll14_std",
+      "exp_roll28_mean",
+      "exp_roll28_std",
+      "net_roll7_mean"
+    ],
+    "limitations": [
+      "Trained on synthetic merchant transaction history.",
+      "Extreme macroeconomic shocks and unobserved vendor disruptions are not modeled.",
+      "Forecasts assume continued operations without prolonged store closures."
+    ]
+  },
+  "loan_acceptance_model": {
+    "model_type": "CalibratedClassifierCV (RandomForest base with sigmoid calibration)",
+    "train_samples": 800,
+    "test_samples": 200,
+    "chronological_split_date": "2026-04-21",
+    "applicant_overlap_between_splits": 149,
+    "class_balance_overall": {
+      "accepted": 469,
+      "rejected": 531
+    },
+    "evaluation_metrics": {
+      "roc_auc": 0.605475040257649,
+      "pr_auc": 0.573181906455203,
+      "accuracy": 0.58,
+      "f1": 0.4939759036144578,
+      "precision": 0.5540540540540541,
+      "recall": 0.44565217391304346,
+      "brier_score": 0.2405878408698375,
+      "confusion_matrix": [
+        [
+          75,
+          33
+        ],
+        [
+          51,
+          41
+        ]
+      ]
+    },
+    "comparison_models": {
+      "logistic_regression": {
+        "roc_auc": 0.5891706924315621,
+        "pr_auc": 0.5822661542308823,
+        "f1": 0.5423728813559322,
+        "brier_score": 0.2554561178844891
+      },
+      "uncalibrated_random_forest": {
+        "roc_auc": 0.5932971014492754,
+        "pr_auc": 0.5547249818493323,
+        "f1": 0.48520710059171596,
+        "brier_score": 0.24225909667326104
+      }
+    },
+    "leakage_analysis": {
+      "roc_auc_with_prescreen": 0.5932971014492754,
+      "roc_auc_without_prescreen": 0.5883655394524959,
+      "prescreen_delta": 0.0049315619967794655,
+      "note": "Pre-screen eligibility is verified to be pre-decision criteria available at inference time."
+    },
+    "feature_list": [
+      "merchant_type",
+      "city",
+      "city_tier",
+      "business_age_months",
+      "monthly_sales_reference",
+      "monthly_profit_reference",
+      "credit_score",
+      "existing_loan_count",
+      "existing_daily_emi",
+      "loan_id",
+      "lender_id",
+      "loan_amount_offered",
+      "annual_interest_rate",
+      "tenure_days",
+      "processing_fee_pct",
+      "debt_service_to_profit_ratio",
+      "pre_screen_eligible"
+    ],
+    "limitations": [
+      "Estimates historical demo acceptance probability; does NOT guarantee actual loan approval.",
+      "Synthetic dataset contains 250 repeating applicants.",
+      "Lender policies may change independently of historical patterns."
+    ]
+  }
+}

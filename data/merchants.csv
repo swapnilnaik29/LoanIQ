@@ -1,0 +1,5 @@
+merchant_id,business_name,merchant_type,city,city_tier,business_age_months,monthly_sales_reference,monthly_profit_reference,credit_score,opening_cash_balance,preferred_language,existing_loan_count,existing_daily_emi,completed_loan_count
+M001,Shree Ganesh Kirana,grocery,Pune,Tier 1,54,145000,17500,684,32000,Marathi,2,358.17,2
+M002,Aarohi Fashion Corner,retail_apparel,Nashik,Tier 2,39,118000,14500,671,27000,Marathi,2,373.83,2
+M003,Sai Snacks & Cafe,restaurant,Kolhapur,Tier 3,31,132000,16000,662,24000,Marathi,2,385.75,2
+M004,Om Mobile Repair,service,Indore,Tier 2,67,92000,13500,698,29000,Hindi,2,401.49,2
